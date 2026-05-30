@@ -92,6 +92,14 @@ def test_explain_self(capsys: pytest.CaptureFixture[str]) -> None:
     assert capsys.readouterr().out.startswith("#")
 
 
+def test_explain_script_name_resolves(capsys: pytest.CaptureFixture[str]) -> None:
+    # The agent-first rubric's explain_self check probes the [project.scripts]
+    # entry name (`spark`), so `explain spark` must resolve to the root entry.
+    rc = main(["explain", "spark"])
+    assert rc == 0
+    assert "# dgx-spark-cli" in capsys.readouterr().out
+
+
 def test_explain_json(capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["explain", "whoami", "--json"])
     assert rc == 0
