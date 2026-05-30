@@ -44,6 +44,12 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 All machine-scope verbs are read-only, support `--json`, and exit 0 even when a
 subsystem is absent (it reports `available: false`). `doctor` is the health gate.
 
+## Monitoring (background watchdog)
+
+- `dgx-spark-cli monitor` — deterministic, AI-free threshold watchdog that
+  webhooks on catastrophes. Verbs: `check`, `once`, `run`, `test`, `config`,
+  and `install`/`enable`/`disable`/`status`/`uninstall` (systemd `--user`).
+
 ## Exit-code policy
 
 - `0` success
@@ -249,6 +255,91 @@ skipped.
 """
 
 
+_MONITOR = """\
+# dgx-spark-cli monitor
+
+A deterministic, **AI-free** watchdog. It periodically runs the machine-scope
+collectors, compares their numbers against configured thresholds, and POSTs to a
+generic webhook when a catastrophe condition crosses — and again when it clears
+(edge-triggered, so a standing condition doesn't spam). Designed to run always-on
+as a systemd `--user` service this CLI installs and manages.
+
+Watches: memory %, swap %, disk %, hottest sensor, GPU temp, load-per-core,
+container health, and subsystem availability (nvidia-smi / docker going dark).
+
+## Verbs
+
+- `monitor check` — evaluate now, print firing alerts (no webhook, no state).
+- `monitor once` — one cycle: evaluate, deliver transitions, update state.
+- `monitor run` — foreground watch loop (the systemd ExecStart).
+- `monitor test` — POST a synthetic alert to verify the webhook.
+- `monitor config [--init]` — show resolved config / write a scaffold.
+- `monitor install | enable | disable | status | uninstall` — systemd `--user`.
+
+## Config
+
+JSON at `~/.config/dgx-spark/monitor.json` (`DGX_SPARK_WEBHOOK_URL` overrides the
+webhook). `webhook_format` is `generic` (default), `slack`, or `discord`. A
+numeric threshold of `null` disables that check. Zero runtime dependencies —
+`urllib` does the POST, never raising into the loop.
+"""
+
+_MONITOR_CHECK = """\
+# dgx-spark-cli monitor check
+
+Evaluate the thresholds against a fresh snapshot and print the alerts that are
+currently firing. Does **not** POST to the webhook and does **not** touch the
+alert state — a safe dry run. Supports `--json` and `--config PATH`.
+"""
+
+_MONITOR_ONCE = """\
+# dgx-spark-cli monitor once
+
+Run a single monitor cycle: snapshot, evaluate, and deliver any edge-triggered
+events (new alerts + recoveries) to the webhook, then persist the alert state.
+Cron-friendly. Exits 0; reports whether delivery happened. `--json`, `--config`.
+"""
+
+_MONITOR_RUN = """\
+# dgx-spark-cli monitor run
+
+The foreground watch loop — what the systemd unit runs as its `ExecStart`. Polls
+every `interval_seconds`, delivering transitions to the webhook; stops cleanly on
+SIGTERM/SIGINT. Requires a valid webhook (errors with exit 2 otherwise).
+`--interval N` overrides the poll period; `--config PATH` selects the config.
+"""
+
+_MONITOR_TEST = """\
+# dgx-spark-cli monitor test
+
+POST a synthetic alert to the configured webhook to verify connectivity and
+formatting. Exits 2 if no webhook is configured or the POST fails. `--config`.
+"""
+
+_MONITOR_CONFIG = """\
+# dgx-spark-cli monitor config
+
+Show the resolved configuration (thresholds, webhook, interval) and whether it
+is valid. `--init` writes a scaffold config file you can edit. `--json`,
+`--config PATH`. The webhook may also come from `DGX_SPARK_WEBHOOK_URL`.
+"""
+
+_MONITOR_SYSTEMD = """\
+# dgx-spark-cli monitor (systemd management)
+
+Manage the monitor as a systemd `--user` service:
+
+- `monitor install` — write `~/.config/systemd/user/dgx-spark-monitor.service`.
+- `monitor enable` — `systemctl --user enable --now` (+ `loginctl enable-linger`
+  so it survives logout/reboot; `--no-linger` to skip).
+- `monitor disable` — stop and disable the service.
+- `monitor status` — unit installed/active/enabled state + currently firing keys.
+- `monitor uninstall` — disable and remove the unit file.
+
+All `systemctl`/`loginctl` calls degrade gracefully when systemd is absent.
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("spark",): _ROOT,
@@ -268,4 +359,16 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("containers",): _CONTAINERS,
     ("network",): _NETWORK,
     ("processes",): _PROCESSES,
+    ("monitor",): _MONITOR,
+    ("monitor", "overview"): _MONITOR,
+    ("monitor", "check"): _MONITOR_CHECK,
+    ("monitor", "once"): _MONITOR_ONCE,
+    ("monitor", "run"): _MONITOR_RUN,
+    ("monitor", "test"): _MONITOR_TEST,
+    ("monitor", "config"): _MONITOR_CONFIG,
+    ("monitor", "install"): _MONITOR_SYSTEMD,
+    ("monitor", "enable"): _MONITOR_SYSTEMD,
+    ("monitor", "disable"): _MONITOR_SYSTEMD,
+    ("monitor", "status"): _MONITOR_SYSTEMD,
+    ("monitor", "uninstall"): _MONITOR_SYSTEMD,
 }

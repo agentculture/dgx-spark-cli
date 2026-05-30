@@ -44,6 +44,16 @@ Machine scope (DGX Spark host telemetry)
   dgx-spark-cli processes          Top processes by resident memory.
 These are read-only and exit 0 even when a subsystem is absent.
 
+Monitoring (AI-free background watchdog)
+----------------------------------------
+  dgx-spark-cli monitor check      Evaluate thresholds now (no webhook).
+  dgx-spark-cli monitor once       One cycle: evaluate + webhook + state.
+  dgx-spark-cli monitor run        Foreground watch loop (systemd ExecStart).
+  dgx-spark-cli monitor test       POST a synthetic alert to the webhook.
+  dgx-spark-cli monitor config     Show/scaffold thresholds + webhook.
+  dgx-spark-cli monitor install    Manage a systemd --user service.
+Webhooks on catastrophes (memory/disk/thermal/GPU/containers); no AI.
+
 Machine-readable output
 -----------------------
 Every command supports --json. Errors in JSON mode emit
@@ -82,6 +92,10 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["containers"], "summary": "Running Docker containers and health."},
             {"path": ["network"], "summary": "Interfaces, routes, reachable addresses."},
             {"path": ["processes"], "summary": "Top processes by resident memory."},
+            {"path": ["monitor", "check"], "summary": "Evaluate alert thresholds now."},
+            {"path": ["monitor", "once"], "summary": "One monitor cycle + webhook delivery."},
+            {"path": ["monitor", "run"], "summary": "Foreground watchdog loop."},
+            {"path": ["monitor", "config"], "summary": "Show/scaffold monitor config."},
         ],
         "exit_codes": {
             "0": "success",

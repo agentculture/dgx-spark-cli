@@ -32,6 +32,8 @@ _VERBS = [
     "doctor — check the agent-identity invariants",
     "status — machine-wide DGX Spark scope (also: memory, gpu, disk, "
     "thermal, containers, network, processes)",
+    "monitor — AI-free threshold watchdog that webhooks on catastrophes "
+    "(check/once/run/test/config + systemd)",
 ]
 
 

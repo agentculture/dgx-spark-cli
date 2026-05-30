@@ -61,6 +61,38 @@ Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment
 error, `3+` reserved.
 
+### Monitoring (`monitor`) — AI-free webhook watchdog
+
+`monitor` turns the collectors into a deterministic, always-on watchdog. It
+evaluates the same numbers against configurable thresholds and POSTs to a
+**generic webhook** when a catastrophe condition crosses — and again when it
+clears (edge-triggered, so a standing condition doesn't spam). No AI, no new
+dependencies (`urllib` does the POST).
+
+```bash
+dgx-spark-cli monitor config --init     # scaffold ~/.config/dgx-spark/monitor.json
+export DGX_SPARK_WEBHOOK_URL=https://…  # or put webhook_url in the config
+dgx-spark-cli monitor check             # dry run: what's firing right now
+dgx-spark-cli monitor test              # POST a synthetic alert
+dgx-spark-cli monitor install           # write the systemd --user unit
+dgx-spark-cli monitor enable            # start it always-on (+ linger)
+dgx-spark-cli monitor status            # service + currently firing alerts
+```
+
+| Verb | What it does |
+|------|--------------|
+| `monitor check` | Evaluate thresholds now (no webhook, no state change). |
+| `monitor once` | One cycle: evaluate, deliver transitions, update state. |
+| `monitor run` | Foreground watch loop (the systemd `ExecStart`). |
+| `monitor test` | POST a synthetic alert to verify the webhook. |
+| `monitor config [--init]` | Show resolved config / write a scaffold. |
+| `monitor install\|enable\|disable\|status\|uninstall` | Manage the systemd `--user` service. |
+
+Watches memory %, swap %, disk %, hottest sensor, GPU temp, load-per-core,
+container health, and subsystem availability. Thresholds live in the config
+(`null` disables a check); `webhook_format` is `generic` (default), `slack`, or
+`discord`.
+
 ## Make it your own
 
 1. Rename the package `spark/` and the `dgx-spark-cli`
