@@ -63,6 +63,7 @@ def test_learn_text(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert len(out) >= 200
     assert "dgx-spark-cli" in out
+    assert "command map" in out.lower()
     assert "Exit-code policy" in out
     assert "--json" in out
     assert "explain" in out
