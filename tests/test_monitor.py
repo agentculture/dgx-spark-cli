@@ -196,11 +196,14 @@ def test_post_success_and_records_request() -> None:
     def opener(req, timeout):
         seen["url"] = req.full_url
         seen["body"] = json.loads(req.data)
+        seen["ua"] = req.get_header("User-agent")
         return _Resp(200)
 
     ok, err = notify.post("https://x/y", {"a": 1}, opener=opener)
     assert ok is True and err is None
     assert seen["url"] == "https://x/y" and seen["body"] == {"a": 1}
+    # Must send an explicit UA — Discord/Cloudflare 403s the default urllib one.
+    assert seen["ua"] and "dgx-spark-cli-monitor" in seen["ua"]
 
 
 def test_post_http_error_and_retries() -> None:

@@ -12,6 +12,12 @@ import urllib.error
 import urllib.request
 from typing import Callable, Optional
 
+from spark import __version__
+
+# Webhooks behind Cloudflare (Discord, etc.) reject the default
+# ``Python-urllib/x.y`` User-Agent with HTTP 403, so we send an explicit one.
+_USER_AGENT = f"dgx-spark-cli-monitor/{__version__}"
+
 _SEVERITY_EMOJI = {"critical": "\U0001f534", "warning": "\U0001f7e0"}  # red / orange circle
 _RESOLVED_EMOJI = "✅"  # check mark
 
@@ -72,7 +78,10 @@ def post(
         return False, "webhook_url must be an http(s) URL"
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
-        url, data=body, headers={"Content-Type": "application/json"}, method="POST"
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "User-Agent": _USER_AGENT},
+        method="POST",
     )
     do_open = opener or _default_open
     last_error = "unknown error"

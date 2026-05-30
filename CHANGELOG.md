@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-05-30
+
+### Fixed
+
+- Webhook delivery now sends an explicit `User-Agent` header (`dgx-spark-cli-monitor/<version>`). Discord and other Cloudflare-fronted webhooks reject the default `Python-urllib/x.y` User-Agent with HTTP 403, so `monitor test` and `monitor run` failed to deliver to a Discord webhook.
+
 ## [0.3.0] - 2026-05-30
 
 ### Added
