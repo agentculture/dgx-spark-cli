@@ -27,6 +27,8 @@ from spark.monitor.config import default_state_path
 from spark.monitor.rules import evaluate
 from spark.monitor.state import load_state
 
+_SUBJECT_CONFIG = "monitor config"
+
 
 def _load(args: argparse.Namespace) -> mconfig.Config:
     return mconfig.load(getattr(args, "config", None))
@@ -241,26 +243,7 @@ def cmd_test(args: argparse.Namespace) -> int:
 # --- config ---------------------------------------------------------------
 
 
-def cmd_config(args: argparse.Namespace) -> int:
-    if getattr(args, "init", False):
-        path = mconfig.init_file(getattr(args, "config", None))
-        msg = {"subject": "monitor config", "action": "init", "path": str(path)}
-        if _json(args):
-            emit_result(msg, json_mode=True)
-        else:
-            emit_result(
-                f"wrote scaffold config: {path}\nedit webhook_url, then 'monitor test'.",
-                json_mode=False,
-            )
-        return 0
-    cfg = _load(args)
-    errors = mconfig.validate(cfg)
-    body = cfg.to_dict()
-    body.update({"source_path": cfg.source_path, "valid": not errors, "errors": errors})
-    if _json(args):
-        emit_result({"subject": "monitor config", **body}, json_mode=True)
-        return 0
-    th = cfg.thresholds
+def _config_sections(cfg: mconfig.Config, errors: list) -> list:
     sections = [
         {
             "title": "Delivery",
@@ -271,11 +254,37 @@ def cmd_config(args: argparse.Namespace) -> int:
                 f"source: {cfg.source_path or '(defaults — no file)'}",
             ],
         },
-        {"title": "Thresholds", "items": [f"{k}: {v}" for k, v in th.items()]},
+        {"title": "Thresholds", "items": [f"{k}: {v}" for k, v in cfg.thresholds.items()]},
     ]
     if errors:
         sections.insert(0, {"title": "Invalid", "items": errors})
-    emit_result(render_sections("monitor config", sections), json_mode=False)
+    return sections
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    json_mode = _json(args)
+    if getattr(args, "init", False):
+        path = mconfig.init_file(getattr(args, "config", None))
+        if json_mode:
+            emit_result(
+                {"subject": _SUBJECT_CONFIG, "action": "init", "path": str(path)}, json_mode=True
+            )
+        else:
+            emit_result(
+                f"wrote scaffold config: {path}\nedit webhook_url, then 'monitor test'.",
+                json_mode=False,
+            )
+    else:
+        cfg = _load(args)
+        errors = mconfig.validate(cfg)
+        if json_mode:
+            body = cfg.to_dict()
+            body.update({"source_path": cfg.source_path, "valid": not errors, "errors": errors})
+            emit_result({"subject": _SUBJECT_CONFIG, **body}, json_mode=True)
+        else:
+            emit_result(
+                render_sections(_SUBJECT_CONFIG, _config_sections(cfg, errors)), json_mode=False
+            )
     return 0
 
 

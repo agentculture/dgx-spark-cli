@@ -17,6 +17,8 @@ from spark.monitor.config import Config
 from spark.monitor.rules import evaluate
 from spark.probe import containers, disk, gpu, host, memory, thermal
 
+_MAX_INTERVAL = 3600  # hard ceiling on the poll interval (seconds)
+
 
 def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -142,11 +144,13 @@ def run_loop(
                 emit(result)
             if max_cycles is not None and ran >= max_cycles:
                 break
-            # Interruptible sleep: wake promptly on a stop signal.
-            waited = 0.0
-            while waited < config.interval_seconds and not stop["flag"]:
+            # Interruptible sleep, bounded by a constant ceiling so a misconfigured
+            # interval can never make the loop run unbounded; wake on a stop signal.
+            interval = min(max(1, int(config.interval_seconds)), _MAX_INTERVAL)
+            for _ in range(interval):
+                if stop["flag"]:
+                    break
                 sleep(1.0)
-                waited += 1.0
     finally:
         if handlers is not None:
             signal.signal(signal.SIGTERM, handlers[0])

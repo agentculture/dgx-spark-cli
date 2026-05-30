@@ -88,6 +88,7 @@ def post(
             last_error = f"HTTP {code}"
         except urllib.error.HTTPError as err:
             last_error = f"HTTP {err.code}"
-        except (urllib.error.URLError, OSError, ValueError) as err:
+        except (OSError, ValueError) as err:
+            # urllib.error.URLError is a subclass of OSError, so it's covered.
             last_error = str(err)
     return False, last_error

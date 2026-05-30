@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Union
 
 from spark.monitor.rules import Alert
 
 _EMPTY = {"firing": {}, "cycle": 0}
 
 
-def load_state(path: Union[str, Path]) -> dict:
+def load_state(path: str | Path) -> dict:
     """Load persisted state, or a fresh empty state on any read/parse error."""
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -32,7 +31,7 @@ def load_state(path: Union[str, Path]) -> dict:
     }
 
 
-def save_state(path: Union[str, Path], state: dict) -> None:
+def save_state(path: str | Path, state: dict) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(state) + "\n", encoding="utf-8")
@@ -56,10 +55,9 @@ def diff(
 
     for key, alert in current.items():
         last = prev_firing.get(key)
-        if last is None:
-            events.append({"status": "firing", "alert": alert.to_dict()})
-            new_firing[key] = cycle
-        elif renotify_cycles > 0 and (cycle - int(last)) >= renotify_cycles:
+        seen = last is not None
+        renotify_due = seen and renotify_cycles > 0 and (cycle - int(last)) >= renotify_cycles
+        if not seen or renotify_due:
             events.append({"status": "firing", "alert": alert.to_dict()})
             new_firing[key] = cycle
         else:
