@@ -29,6 +29,18 @@ def _read_temp_c(path: Path) -> Optional[float]:
         return None
 
 
+def _record(tag: str, temp: float, kind: str, items: list, sensors: list, warnings: list) -> None:
+    """Append one sensor reading to the running items/sensors/warnings lists."""
+    items.append(f"{tag}: {temp:.1f} C")
+    sensors.append({"kind": kind, "name": tag, "temp_c": temp})
+    if temp >= _HOT_C:
+        warnings.append(f"{tag} at {temp:.1f} C")
+
+
+def _hotter(current: Optional[float], temp: float) -> float:
+    return temp if current is None else max(current, temp)
+
+
 def _zones(root: Path, sensors: list, warnings: list) -> tuple[list[str], Optional[float]]:
     hottest: Optional[float] = None
     items: list[str] = []
@@ -39,11 +51,24 @@ def _zones(root: Path, sensors: list, warnings: list) -> tuple[list[str], Option
         temp = _read_temp_c(zdir / "temp")
         if temp is None:
             continue
-        items.append(f"{ztype}: {temp:.1f} C")
-        sensors.append({"kind": "zone", "name": ztype, "temp_c": temp})
-        hottest = temp if hottest is None else max(hottest, temp)
-        if temp >= _HOT_C:
-            warnings.append(f"{ztype} at {temp:.1f} C")
+        _record(ztype, temp, "zone", items, sensors, warnings)
+        hottest = _hotter(hottest, temp)
+    return items, hottest
+
+
+def _hwmon_chip(
+    hdir: Path, name: str, sensors: list, warnings: list
+) -> tuple[list[str], Optional[float]]:
+    hottest: Optional[float] = None
+    items: list[str] = []
+    for inp in sorted(hdir.glob("temp*_input")):
+        temp = _read_temp_c(inp)
+        if temp is None:
+            continue
+        label = _run.read_first_line(inp.parent / inp.name.replace("_input", "_label"))
+        tag = f"{name}/{label}" if label else name
+        _record(tag, temp, "hwmon", items, sensors, warnings)
+        hottest = _hotter(hottest, temp)
     return items, hottest
 
 
@@ -56,17 +81,10 @@ def _hwmon(root: Path, sensors: list, warnings: list) -> tuple[list[str], Option
         name = _run.read_first_line(hdir / "name") or hdir.name
         if name == "acpitz":
             continue  # mirrors thermal_zone* readings — avoid double-reporting
-        for inp in sorted(hdir.glob("temp*_input")):
-            temp = _read_temp_c(inp)
-            if temp is None:
-                continue
-            label = _run.read_first_line(inp.parent / inp.name.replace("_input", "_label"))
-            tag = f"{name}/{label}" if label else name
-            items.append(f"{tag}: {temp:.1f} C")
-            sensors.append({"kind": "hwmon", "name": tag, "temp_c": temp})
-            hottest = temp if hottest is None else max(hottest, temp)
-            if temp >= _HOT_C:
-                warnings.append(f"{tag} at {temp:.1f} C")
+        chip_items, chip_hot = _hwmon_chip(hdir, name, sensors, warnings)
+        items.extend(chip_items)
+        if chip_hot is not None:
+            hottest = _hotter(hottest, chip_hot)
     return items, hottest
 
 

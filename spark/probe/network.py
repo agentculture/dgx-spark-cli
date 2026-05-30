@@ -59,13 +59,15 @@ def _default_routes(run: Runner) -> list[dict]:
     return routes
 
 
-def collect(runner: Optional[Runner] = None) -> dict:
-    """Return a network report using ``runner`` (injectable; defaults to ip)."""
-    run = runner or default_runner
-    out = run("ip", ["-br", "addr"])
-    if out is None:
-        return unavailable("network", "ip -br addr", "install iproute2 (the 'ip' command)")
+def _is_reachable(kind: str, addr: str) -> bool:
+    # Real LAN/VPN addresses, not docker bridge gateways or container/loopback.
+    return kind in ("wifi", "ethernet", "tailscale", "other") and not addr.startswith(
+        ("127.", "169.254.")
+    )
 
+
+def _parse_addr(out: str) -> tuple[list[dict], int, int, list[str]]:
+    """Parse ``ip -br addr`` into (named interfaces, veth#, bridge#, reachable)."""
     interfaces: list[dict] = []
     veth_count = 0
     bridge_count = 0
@@ -74,26 +76,24 @@ def collect(runner: Optional[Runner] = None) -> dict:
         parts = line.split()
         if len(parts) < 2:
             continue
-        raw_name, state = parts[0], parts[1]
-        name = raw_name.split("@")[0]
+        name = parts[0].split("@")[0]
+        state = parts[1]
         kind = _classify(name)
         ipv4s = _ipv4s(parts[2:])
-        # "Reachable" = real LAN/VPN addresses, not docker bridge gateways or
-        # container veth/loopback links.
-        if kind in ("wifi", "ethernet", "tailscale", "other"):
-            for addr in ipv4s:
-                if not addr.startswith(("127.", "169.254.")):
-                    reachable.append(addr)
+        reachable.extend(a for a in ipv4s if _is_reachable(kind, a))
         if kind == "veth":
             veth_count += 1
             continue
         if kind == "bridge":
             bridge_count += 1
         interfaces.append({"name": name, "kind": kind, "state": state, "ipv4": ipv4s})
+    return interfaces, veth_count, bridge_count, reachable
 
-    routes = _default_routes(run)
 
-    sections: list[dict[str, object]] = []
+def _build_sections(
+    interfaces: list[dict], routes: list[dict], reachable: list[str], veths: int, bridges: int
+) -> list[dict]:
+    sections: list[dict] = []
     if routes:
         sections.append(
             {
@@ -101,27 +101,33 @@ def collect(runner: Optional[Runner] = None) -> dict:
                 "items": [f"via {r['via']} dev {r['dev']} (src {r['src']})" for r in routes],
             }
         )
-
-    iface_items = []
-    for iface in interfaces:
-        if iface["kind"] == "loopback":
-            continue
-        addrs = ", ".join(iface["ipv4"]) or "(no ipv4)"
-        iface_items.append(f"{iface['name']} [{iface['kind']}] {iface['state']}: {addrs}")
+    iface_items = [
+        f"{i['name']} [{i['kind']}] {i['state']}: {', '.join(i['ipv4']) or '(no ipv4)'}"
+        for i in interfaces
+        if i["kind"] != "loopback"
+    ]
     if iface_items:
         sections.append({"title": "Interfaces", "items": iface_items})
-
     summary = []
     if reachable:
         summary.append("reachable IPv4: " + ", ".join(sorted(set(reachable))))
-    summary.append(f"docker bridges: {bridge_count}")
-    summary.append(f"container veth pairs: {veth_count}")
+    summary.append(f"docker bridges: {bridges}")
+    summary.append(f"container veth pairs: {veths}")
     sections.append({"title": "Summary", "items": summary})
+    return sections
 
-    warnings: list[str] = []
-    if not routes:
-        warnings.append("no default route — host may be offline")
 
+def collect(runner: Optional[Runner] = None) -> dict:
+    """Return a network report using ``runner`` (injectable; defaults to ip)."""
+    run = runner or default_runner
+    out = run("ip", ["-br", "addr"])
+    if out is None:
+        return unavailable("network", "ip -br addr", "install iproute2 (the 'ip' command)")
+
+    interfaces, veth_count, bridge_count, reachable = _parse_addr(out)
+    routes = _default_routes(run)
+    sections = _build_sections(interfaces, routes, reachable, veth_count, bridge_count)
+    warnings = [] if routes else ["no default route — host may be offline"]
     data = {
         "interfaces": interfaces,
         "default_routes": routes,

@@ -64,6 +64,33 @@ def _compute_apps(run: Runner) -> list[dict]:
     return apps
 
 
+def _warn_hot(temp: Optional[str]) -> list[str]:
+    if temp is None:
+        return []
+    try:
+        return [f"GPU at {temp} C"] if float(temp) >= _HOT_C else []
+    except ValueError:
+        return []
+
+
+def _memory_line(vals: dict, apps: list, gpu_mem_mib: int) -> str:
+    if vals["memory.total"] is not None:
+        return f"memory: {_fmt(vals['memory.used'])} / {vals['memory.total']} MiB"
+    if apps and gpu_mem_mib:
+        attributed = human_bytes(gpu_mem_mib * 1024 * 1024)
+        return (
+            f"memory: unified (no discrete VRAM); ~{attributed} attributed to "
+            "GPU processes (see 'spark memory')"
+        )
+    return "memory: unified with system RAM (no discrete VRAM); see 'spark memory'"
+
+
+def _app_items(apps: list) -> list[str]:
+    if not apps:
+        return ["none"]
+    return [f"{a['pid']:>8} {a['name']} ({_fmt(a['used_mib'], ' MiB')})" for a in apps]
+
+
 def collect(runner: Optional[Runner] = None) -> dict:
     """Return a GPU report using ``runner`` (injectable; defaults to nvidia-smi)."""
     run = runner or default_runner
@@ -79,32 +106,11 @@ def collect(runner: Optional[Runner] = None) -> dict:
     fields += [""] * (len(_QUERY_FIELDS) - len(fields))
     vals = {key: _na(fields[i]) for i, key in enumerate(_QUERY_FIELDS)}
 
-    temp = vals["temperature.gpu"]
-    warnings: list[str] = []
-    if temp is not None:
-        try:
-            if float(temp) >= _HOT_C:
-                warnings.append(f"GPU at {temp} C")
-        except ValueError:
-            pass
-
     # Compute apps DO report per-process memory even though the aggregate
     # memory.total/used is N/A on unified architecture. Summing them is the
     # closest honest answer to "GPU memory used" on the Spark.
     apps = _compute_apps(run)
     gpu_mem_mib = sum(int(a["used_mib"]) for a in apps if a["used_mib"] and a["used_mib"].isdigit())
-
-    if vals["memory.total"] is None:
-        if apps and gpu_mem_mib:
-            attributed = human_bytes(gpu_mem_mib * 1024 * 1024)
-            mem_line = (
-                f"memory: unified (no discrete VRAM); ~{attributed} attributed to "
-                "GPU processes (see 'spark memory')"
-            )
-        else:
-            mem_line = "memory: unified with system RAM (no discrete VRAM); see 'spark memory'"
-    else:
-        mem_line = f"memory: {_fmt(vals['memory.used'])} / {vals['memory.total']} MiB"
 
     sections = [
         {
@@ -112,20 +118,21 @@ def collect(runner: Optional[Runner] = None) -> dict:
             "items": [
                 f"utilization: {_fmt(vals['utilization.gpu'], '%')}"
                 f" (mem ctrl {_fmt(vals['utilization.memory'], '%')})",
-                f"temperature: {_fmt(temp, ' C')}",
+                f"temperature: {_fmt(vals['temperature.gpu'], ' C')}",
                 f"power: {_fmt(vals['power.draw'], ' W')} / {_fmt(vals['power.limit'], ' W')}",
                 f"sm clock: {_fmt(vals['clocks.sm'], ' MHz')}",
                 f"fan: {_fmt(vals['fan.speed'], '%')}",
-                mem_line,
+                _memory_line(vals, apps, gpu_mem_mib),
             ],
-        }
+        },
+        {"title": "GPU compute processes", "items": _app_items(apps)},
     ]
 
-    if apps:
-        app_items = [f"{a['pid']:>8} {a['name']} ({_fmt(a['used_mib'], ' MiB')})" for a in apps]
-    else:
-        app_items = ["none"]
-    sections.append({"title": "GPU compute processes", "items": app_items})
-
     data = {"gpu": vals, "compute_apps": apps, "gpu_attributed_mib": gpu_mem_mib}
-    return report("gpu", source="nvidia-smi", sections=sections, warnings=warnings, data=data)
+    return report(
+        "gpu",
+        source="nvidia-smi",
+        sections=sections,
+        warnings=_warn_hot(vals["temperature.gpu"]),
+        data=data,
+    )

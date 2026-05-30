@@ -53,6 +53,15 @@ def test_verbs_listed_in_help(capsys: pytest.CaptureFixture[str]) -> None:
         assert verb in out
 
 
+@pytest.mark.parametrize("verb", VERBS)
+def test_verb_tolerates_stray_positional(verb: str, capsys: pytest.CaptureFixture[str]) -> None:
+    # Descriptive verbs must not hard-fail on an extra positional (overview's
+    # contract). A stray arg is accepted and ignored -> exit 0.
+    rc = main([verb, "some-stray-arg"])
+    assert rc == 0
+    assert capsys.readouterr().out.startswith("#")
+
+
 def test_probe_unknown_flag_routes_structured_error(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

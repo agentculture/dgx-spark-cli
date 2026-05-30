@@ -17,6 +17,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Extracted the section renderer into `spark.cli._output.render_sections`, now shared by `overview` and the new probe verbs so they speak one text format.
+- Machine-scope verbs now accept and ignore stray positional arguments (exit 0), matching `overview`'s "descriptive verbs never hard-fail" contract.
 
 ## [0.1.2] - 2026-05-30
 

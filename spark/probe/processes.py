@@ -31,12 +31,8 @@ def _meminfo_total(proc_root: Path) -> Optional[int]:
     return None
 
 
-def _read_proc(pdir: Path) -> Optional[dict]:
-    if not pdir.name.isdigit():
-        return None
-    status = _run.read_text(pdir / "status")
-    if status is None:
-        return None
+def _parse_status(status: str) -> tuple[Optional[int], Optional[str], Optional[str]]:
+    """Pull ``(rss_bytes, name, state)`` from a ``/proc/<pid>/status`` body."""
     rss: Optional[int] = None
     name: Optional[str] = None
     state: Optional[str] = None
@@ -51,6 +47,16 @@ def _read_proc(pdir: Path) -> Optional[dict]:
         elif line.startswith("State:"):
             field = line.partition(":")[2].strip()
             state = field.split()[0] if field else None
+    return rss, name, state
+
+
+def _read_proc(pdir: Path) -> Optional[dict]:
+    if not pdir.name.isdigit():
+        return None
+    status = _run.read_text(pdir / "status")
+    if status is None:
+        return None
+    rss, name, state = _parse_status(status)
     if rss is None:
         return None  # kernel thread / unreadable — no resident memory
     cmdline = _run.read_text(pdir / "cmdline") or ""

@@ -41,5 +41,9 @@ def register_probe(
     """Register a ``--json``-supporting leaf verb backed by ``collect``."""
     parser = sub.add_parser(name, help=help_text)
     parser.add_argument("--json", action="store_true", help="Emit structured JSON.")
+    # Descriptive verbs must never hard-fail on a stray positional (the same
+    # contract `overview` honors). Accept and ignore any extra args so e.g.
+    # `spark memory /some/path` still exits 0 rather than erroring.
+    parser.add_argument("ignored", nargs="*", help=argparse.SUPPRESS)
     parser.set_defaults(func=lambda args: emit_probe(collect, args))
     return parser

@@ -21,8 +21,10 @@ Scaffold for a new Culture mesh agent: an agent-first CLI (cited from the teken
 guildmaster skill kit under .claude/skills/, and a deploy/CI baseline. Clone it,
 rename the package, and edit culture.yaml to mint a new agent.
 
-Commands
---------
+Command map
+-----------
+Commands by path:
+
   dgx-spark-cli whoami             Identity from culture.yaml.
   dgx-spark-cli learn              This self-teaching prompt.
   dgx-spark-cli explain <path>...  Markdown docs for any noun/verb path.
