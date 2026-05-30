@@ -175,9 +175,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             "(or export DGX_SPARK_WEBHOOK_URL)",
         )
 
+    json_mode = _json(args)
+
     def _emit_cycle(result: dict) -> None:
         if not result["events"]:
             return  # stay quiet on no-change cycles
+        if json_mode:
+            emit_result(result, json_mode=True)  # structured event stream on stdout
+            return
         if not result["delivered"]:
             outcome = "not delivered"
         elif result["sent"]:
@@ -223,20 +228,19 @@ def cmd_test(args: argparse.Namespace) -> int:
     ok, error = notify.post(
         cfg.webhook_url, payload, timeout=cfg.timeout_seconds, retries=cfg.retries
     )
-    payload_out = {"subject": "monitor test", "webhook": cfg.webhook_url, "ok": ok, "error": error}
-    if _json(args):
-        emit_result(payload_out, json_mode=True)
-    else:
-        emit_result(
-            f"monitor test -> {cfg.webhook_url}\n" + ("ok" if ok else f"FAILED: {error}"),
-            json_mode=False,
-        )
     if not ok:
         raise CliError(
             code=EXIT_ENV_ERROR,
             message=f"webhook POST failed: {error}",
             remediation="check the URL is reachable and accepts POST JSON",
         )
+    if _json(args):
+        emit_result(
+            {"subject": "monitor test", "webhook": cfg.webhook_url, "ok": True, "error": None},
+            json_mode=True,
+        )
+    else:
+        emit_result(f"monitor test -> {cfg.webhook_url}\nok", json_mode=False)
     return 0
 
 
@@ -307,26 +311,29 @@ def cmd_install(args: argparse.Namespace) -> int:
 
 def cmd_enable(args: argparse.Namespace) -> int:
     ok, error = systemd.enable(linger=not getattr(args, "no_linger", False))
-    payload = {"subject": "monitor enable", "ok": ok, "error": error}
-    if _json(args):
-        emit_result(payload, json_mode=True)
-    else:
-        emit_result("enabled + started" if ok else f"enable failed: {error}", json_mode=False)
     if not ok:
         raise CliError(
             code=EXIT_ENV_ERROR,
             message=f"could not enable service: {error}",
             remediation="ensure the systemd user manager is running and the unit is installed",
         )
+    if _json(args):
+        emit_result({"subject": "monitor enable", "ok": True, "error": None}, json_mode=True)
+    else:
+        emit_result("enabled + started", json_mode=False)
     return 0
 
 
 def cmd_disable(args: argparse.Namespace) -> int:
     ok, error = systemd.disable()
+    # disable is idempotent (a not-loaded unit is fine), so it isn't fatal — but a
+    # failure note is a diagnostic and belongs on stderr, not stdout.
     if _json(args):
         emit_result({"subject": "monitor disable", "ok": ok, "error": error}, json_mode=True)
+    elif ok:
+        emit_result("disabled + stopped", json_mode=False)
     else:
-        emit_result("disabled + stopped" if ok else f"disable failed: {error}", json_mode=False)
+        emit_diagnostic(f"disable: {error}")
     return 0
 
 
@@ -378,6 +385,12 @@ def _add_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", help="Path to the monitor config JSON (default: XDG).")
 
 
+def _add_ignored(parser: argparse.ArgumentParser) -> None:
+    # Descriptive verbs must never hard-fail on a stray positional (overview's
+    # contract). Accept and ignore any extra args.
+    parser.add_argument("ignored", nargs="*", help=argparse.SUPPRESS)
+
+
 def register(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("monitor", help="Threshold watchdog that webhooks on catastrophes.")
     _add_json(p)
@@ -386,19 +399,29 @@ def register(sub: argparse._SubParsersAction) -> None:
 
     ov = noun.add_parser("overview", help="Describe the monitor surface.")
     _add_json(ov)
+    _add_ignored(ov)
     ov.set_defaults(func=cmd_overview)
 
+    # Descriptive verbs (read-only) tolerate stray positionals.
     for name, func, helptext in (
         ("check", cmd_check, "Evaluate thresholds now (no webhook, no state change)."),
-        ("once", cmd_once, "Run one cycle: evaluate, deliver transitions, update state."),
         ("status", cmd_status, "Show systemd service + current firing alerts."),
     ):
         verb = noun.add_parser(name, help=helptext)
         _add_json(verb)
         _add_config(verb)
+        _add_ignored(verb)
         verb.set_defaults(func=func)
 
+    once = noun.add_parser(
+        "once", help="Run one cycle: evaluate, deliver transitions, update state."
+    )
+    _add_json(once)
+    _add_config(once)
+    once.set_defaults(func=cmd_once)
+
     run = noun.add_parser("run", help="Foreground watch loop (the systemd ExecStart).")
+    _add_json(run)
     _add_config(run)
     run.add_argument("--interval", type=int, help="Override the poll interval (seconds).")
     run.set_defaults(func=cmd_run)

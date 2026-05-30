@@ -28,10 +28,22 @@ def unit_path() -> Path:
     return unit_dir() / UNIT_NAME
 
 
+def _unit_arg(value: str) -> str:
+    """Quote/escape one ExecStart argument for the systemd unit grammar.
+
+    systemd splits ExecStart into argv on whitespace and treats ``%`` as a
+    specifier, so a path with spaces or ``%`` would corrupt the command. Double
+    quotes preserve spaces; ``%`` is escaped to ``%%`` and ``"``/``\\`` are
+    backslash-escaped.
+    """
+    escaped = value.replace("%", "%%").replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def exec_start(config_path: Optional[str] = None) -> str:
     """ExecStart line: the running interpreter + module entry (PATH-independent)."""
     cfg = config_path or str(default_config_path())
-    return f"{sys.executable} -m spark monitor run --config {cfg}"
+    return f"{_unit_arg(sys.executable)} -m spark monitor run --config {_unit_arg(cfg)}"
 
 
 def unit_text(config_path: Optional[str] = None) -> str:

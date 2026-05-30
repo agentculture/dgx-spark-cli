@@ -125,6 +125,28 @@ def test_enable_disable_uninstall_stubbed(monkeypatch, capsys) -> None:
     assert main(["monitor", "uninstall", "--json"]) == 0
 
 
+def test_run_accepts_json_flag(monkeypatch) -> None:
+    monkeypatch.setenv("DGX_SPARK_WEBHOOK_URL", "https://example.com/hook")
+    monkeypatch.setattr("spark.cli._commands.monitor.engine.run_loop", lambda cfg, **kw: 0)
+    assert main(["monitor", "run", "--json"]) == 0
+
+
+def test_enable_failure_routes_to_stderr(monkeypatch, capsys) -> None:
+    # systemctl "fails" -> failure must go to stderr (CliError), not stdout.
+    monkeypatch.setattr("spark.monitor.systemd.run_tool", lambda _n, _a: None)
+    rc = main(["monitor", "enable", "--no-linger"])
+    assert rc == 2
+    out, err = capsys.readouterr()
+    assert out == ""  # results stream stays clean
+    assert err.startswith("error:") and "hint:" in err
+
+
+def test_descriptive_verbs_tolerate_stray_positional(capsys) -> None:
+    for verb in ("overview", "check", "status"):
+        assert main(["monitor", verb, "stray-arg"]) == 0
+        assert capsys.readouterr().out.startswith("#")
+
+
 def test_monitor_unknown_flag_structured_error(capsys) -> None:
     with pytest.raises(SystemExit) as exc:
         main(["monitor", "check", "--bogus"])

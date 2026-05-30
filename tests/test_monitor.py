@@ -159,6 +159,17 @@ def test_state_save_roundtrip(tmp_path) -> None:
     assert state.load_state(path) == {"firing": {"k": 3}, "cycle": 3}
 
 
+def test_state_load_sanitizes_corrupt_firing(tmp_path) -> None:
+    bad = tmp_path / "s.json"
+    bad.write_text(json.dumps({"firing": {"good": 3, "bad": "xyz", "f": 2.0}, "cycle": "7"}))
+    loaded = state.load_state(bad)
+    assert loaded["firing"] == {"good": 3, "f": 2}  # non-int "bad" dropped, float coerced
+    assert loaded["cycle"] == 7
+    # diff() must survive whatever load_state returns (no crash on int()).
+    events, firing = state.diff(loaded["firing"], [Alert("good", "critical", "x")], 8, 30)
+    assert isinstance(firing["good"], int)
+
+
 # --- notify ---------------------------------------------------------------
 
 
@@ -277,8 +288,14 @@ def test_snapshot_runs_on_host() -> None:
 def test_unit_text_and_exec_start() -> None:
     txt = systemd.unit_text("/tmp/cfg.json")
     assert "[Service]" in txt and "Restart=on-failure" in txt
-    assert "-m spark monitor run --config /tmp/cfg.json" in txt
-    assert systemd.exec_start("/x.json").endswith("-m spark monitor run --config /x.json")
+    assert '-m spark monitor run --config "/tmp/cfg.json"' in txt
+    assert systemd.exec_start("/x.json").endswith('--config "/x.json"')
+
+
+def test_exec_start_escapes_spaces_and_percent() -> None:
+    # Spaces must stay one argv entry; '%' must be escaped (systemd specifier).
+    line = systemd.exec_start("/home/u/My Configs/m%n.json")
+    assert '--config "/home/u/My Configs/m%%n.json"' in line
 
 
 def test_systemd_install_uninstall(tmp_path, monkeypatch) -> None:

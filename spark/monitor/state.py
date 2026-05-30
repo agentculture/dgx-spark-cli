@@ -24,11 +24,21 @@ def load_state(path: str | Path) -> dict:
         return dict(_EMPTY, firing={})
     if not isinstance(data, dict):
         return dict(_EMPTY, firing={})
-    firing = data.get("firing")
-    return {
-        "firing": firing if isinstance(firing, dict) else {},
-        "cycle": int(data.get("cycle", 0) or 0),
-    }
+    # Sanitize: a hand-edited or partially-corrupt file may carry non-int firing
+    # values; coerce what we can and drop the rest so diff() never crashes.
+    raw = data.get("firing")
+    firing: dict = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            try:
+                firing[str(key)] = int(value)
+            except (TypeError, ValueError):
+                continue
+    try:
+        cycle = int(data.get("cycle", 0) or 0)
+    except (TypeError, ValueError):
+        cycle = 0
+    return {"firing": firing, "cycle": cycle}
 
 
 def save_state(path: str | Path, state: dict) -> None:
