@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 
 from spark.cli._commands.whoami import report
-from spark.cli._output import emit_result
+from spark.cli._output import emit_result, render_sections
 
 _ARTIFACTS = [
     "culture.yaml + CLAUDE.md — mesh identity (suffix + backend)",
@@ -30,6 +30,8 @@ _VERBS = [
     "explain <path> — markdown docs for a topic",
     "overview — this descriptive snapshot",
     "doctor — check the agent-identity invariants",
+    "status — machine-wide DGX Spark scope (also: memory, gpu, disk, "
+    "thermal, containers, network, processes)",
 ]
 
 
@@ -70,13 +72,9 @@ def cli_sections() -> list[dict[str, object]]:
 
 
 def render_text(subject: str, sections: list[dict[str, object]]) -> str:
-    lines = [f"# {subject}", ""]
-    for section in sections:
-        lines.append(f"## {section['title']}")
-        for item in section["items"]:
-            lines.append(f"- {item}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
+    # Thin alias kept for backwards-compat; the renderer now lives in _output
+    # so the probe verbs share one text format.
+    return render_sections(subject, sections)
 
 
 def emit_overview(subject: str, sections: list[dict[str, object]], *, json_mode: bool) -> None:

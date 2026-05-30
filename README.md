@@ -34,6 +34,29 @@ uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
 | `cli overview` | Describe the CLI surface itself. |
 
+### Machine scope (DGX Spark host telemetry)
+
+The Spark *is* the system, so these read-only verbs sit at the top level:
+
+| Verb | What it does |
+|------|--------------|
+| `status` | Machine-wide scope, anomalies first — the headline. |
+| `memory` | Unified RAM + swap (the GB10 shares one pool across CPU and GPU). |
+| `gpu` | Blackwell GB10: utilization, temp, power, clocks, and GPU processes. |
+| `disk` | Filesystem usage for real block devices (via `/proc/mounts` + `statvfs`). |
+| `thermal` | SoC thermal zones and hwmon sensors (no `lm-sensors` needed). |
+| `containers` | Running Docker containers and their health. |
+| `network` | Interfaces, default route, and reachable addresses. |
+| `processes` | Top processes by resident memory (via `/proc`). |
+
+They have zero runtime dependencies — kernel telemetry is read from `/proc` and
+`/sys`, while `nvidia-smi`, `docker`, and `ip` are shelled out and degrade
+gracefully (a missing tool reports `available: false` and still exits 0).
+`doctor` remains the health gate. Because the GB10 has no discrete VRAM,
+`nvidia-smi` reports aggregate GPU memory as `[N/A]`; `gpu` instead sums
+per-process compute-app memory so you can see how much of the shared pool the
+GPU holds.
+
 Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment
 error, `3+` reserved.

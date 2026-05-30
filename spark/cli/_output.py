@@ -51,3 +51,19 @@ def emit_diagnostic(message: str, *, stream: TextIO | None = None) -> None:
     """Write a human diagnostic (progress, summary) to stderr."""
     s = stream if stream is not None else sys.stderr
     s.write(message if message.endswith("\n") else message + "\n")
+
+
+def render_sections(subject: str, sections: list[dict[str, object]]) -> str:
+    """Render ``# subject`` + ``## title`` / ``- item`` markdown sections.
+
+    Shared by the descriptive verbs (``overview``) and the host-telemetry
+    probes so they speak one text format. ``sections`` is a list of
+    ``{"title": str, "items": list[str]}``.
+    """
+    lines = [f"# {subject}", ""]
+    for section in sections:
+        lines.append(f"## {section['title']}")
+        for item in section["items"]:  # type: ignore[index]
+            lines.append(f"- {item}")
+        lines.append("")
+    return "\n".join(lines).rstrip()

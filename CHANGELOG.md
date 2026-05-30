@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-05-30
+
+### Added
+
+- Machine-scope host-telemetry verbs for the DGX Spark: `status` (machine-wide scope, anomalies first), `memory`, `gpu`, `disk`, `thermal`, `containers`, `network`, and `processes`. All are read-only, support `--json`, route results to stdout / diagnostics to stderr, and exit 0 even when a subsystem is absent (reporting `available: false`) — `doctor` remains the health gate.
+- `spark gpu` derives GPU-attributed memory by summing per-process compute-app usage, because the GB10's unified LPDDR5X pool makes `nvidia-smi`'s aggregate VRAM report `[N/A]`. `spark memory` reports the shared CPU+GPU pool and flags swap pressure.
+- New zero-runtime-dependency `spark.probe` package: kernel telemetry is read from `/proc` and `/sys`, while `nvidia-smi`, `docker`, and `ip` are resolved via `shutil.which` and shelled out, degrading gracefully when absent. Every collector takes an injectable file root / command runner so the suite runs on x86 CI with no GPU, docker, or aarch64.
+- `explain` catalog entries and `learn`/`overview` command maps for all eight new verbs.
+
+### Changed
+
+- Extracted the section renderer into `spark.cli._output.render_sections`, now shared by `overview` and the new probe verbs so they speak one text format.
+
 ## [0.1.2] - 2026-05-30
 
 ### Changed

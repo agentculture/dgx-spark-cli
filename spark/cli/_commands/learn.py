@@ -30,6 +30,18 @@ Commands
   dgx-spark-cli doctor             Check the agent-identity invariants.
   dgx-spark-cli cli overview       Describe the CLI surface itself.
 
+Machine scope (DGX Spark host telemetry)
+----------------------------------------
+  dgx-spark-cli status             Machine-wide scope, anomalies first.
+  dgx-spark-cli memory             Unified RAM + swap (CPU and GPU share it).
+  dgx-spark-cli gpu                Blackwell GB10: util, temp, power, processes.
+  dgx-spark-cli disk               Filesystem usage for real block devices.
+  dgx-spark-cli thermal            SoC thermal zones and hwmon sensors.
+  dgx-spark-cli containers         Running Docker containers and health.
+  dgx-spark-cli network            Interfaces, routes, reachable addresses.
+  dgx-spark-cli processes          Top processes by resident memory.
+These are read-only and exit 0 even when a subsystem is absent.
+
 Machine-readable output
 -----------------------
 Every command supports --json. Errors in JSON mode emit
@@ -60,6 +72,14 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["overview"], "summary": "Descriptive snapshot of the agent."},
             {"path": ["doctor"], "summary": "Check the agent-identity invariants."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
+            {"path": ["status"], "summary": "Machine-wide scope, anomalies first."},
+            {"path": ["memory"], "summary": "Unified RAM + swap snapshot."},
+            {"path": ["gpu"], "summary": "Blackwell GB10 GPU snapshot."},
+            {"path": ["disk"], "summary": "Filesystem usage."},
+            {"path": ["thermal"], "summary": "Thermal zones and hwmon sensors."},
+            {"path": ["containers"], "summary": "Running Docker containers and health."},
+            {"path": ["network"], "summary": "Interfaces, routes, reachable addresses."},
+            {"path": ["processes"], "summary": "Top processes by resident memory."},
         ],
         "exit_codes": {
             "0": "success",
