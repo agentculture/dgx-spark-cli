@@ -67,6 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
     from spark.cli._commands import explain as _explain_cmd
     from spark.cli._commands import learn as _learn_cmd
     from spark.cli._commands import machine as _machine_cmds
+    from spark.cli._commands import monitor as _monitor_group
     from spark.cli._commands import overview as _overview_cmd
     from spark.cli._commands import whoami as _whoami_cmd
 
@@ -92,6 +93,8 @@ def _build_parser() -> argparse.ArgumentParser:
     # Host-telemetry verbs (status, memory, gpu, disk, thermal, containers,
     # network, processes) — the DGX Spark scope surface.
     _machine_cmds.register(sub)
+    # Threshold watchdog that webhooks on catastrophes (background service).
+    _monitor_group.register(sub)
     # Register your own noun groups here:
     #   from spark.cli._commands import my_noun as _my_noun_group
     #   _my_noun_group.register(sub)

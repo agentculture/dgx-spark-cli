@@ -56,6 +56,35 @@ def default_runner(name: str, args: Sequence[str]) -> Optional[str]:
     return run_tool(name, args)
 
 
+def run_capture(
+    name: str,
+    args: Sequence[str],
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> Optional[tuple[int, str]]:
+    """Like :func:`run_tool` but return ``(returncode, stdout)`` even on non-zero exit.
+
+    Needed for tools that convey state through the exit code (e.g.
+    ``systemctl --user is-active`` exits 3 for an inactive unit while still
+    printing ``inactive``). Returns ``None`` only when the tool is absent or
+    could not be launched.
+    """
+    exe = shutil.which(name)
+    if exe is None:
+        return None
+    try:
+        proc = subprocess.run(
+            [exe, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.returncode, proc.stdout
+
+
 def read_text(path: str | Path) -> Optional[str]:
     """Read a ``/proc`` or ``/sys`` node, returning ``None`` on any OSError."""
     try:

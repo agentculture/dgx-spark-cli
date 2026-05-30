@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-30
+
+### Added
+
+- `monitor` — a deterministic, AI-free watchdog. It evaluates the machine-scope collectors against configurable thresholds and POSTs to a generic webhook when a catastrophe condition crosses, and again when it clears. Verbs: `check` (dry run), `once` (one cycle), `run` (foreground loop), `test` (synthetic alert), `config [--init]`, and `install`/`enable`/`disable`/`status`/`uninstall` for a systemd `--user` service the CLI installs and manages.
+- Edge-triggered alerting: fires on OK->ALERT, sends a `resolved` event on recovery, and re-notifies a standing condition only every `renotify_cycles` cycles — so it catches catastrophes without spamming. Alert state is persisted under `$XDG_STATE_HOME`; undelivered events are retried rather than dropped.
+- Zero-dependency webhook delivery (`urllib`): http(s)-only (scheme allowlist), bounded retries and timeouts, and it never raises into the loop. Payloads are generic JSON, or Slack/Discord chat presets via `webhook_format`.
+- Watches memory %, swap %, disk %, hottest sensor, GPU temp, load-per-core, container health, and subsystem availability (nvidia-smi/docker going dark). Thresholds and the webhook live in `~/.config/dgx-spark/monitor.json` (a `null` threshold disables that check); `DGX_SPARK_WEBHOOK_URL` overrides the webhook.
+
+### Changed
+
+- Added `spark.probe._run.run_capture`, which returns `(returncode, stdout)` even on a non-zero exit — for tools that convey state through the exit code (e.g. `systemctl --user is-active`).
+
 ## [0.2.0] - 2026-05-30
 
 ### Added
