@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-05-30
+
+### Changed
+
+- Replaced the seed CLAUDE.md bootstrap placeholder with a full runtime prompt via /init — documents the agent-first CLI architecture (CliError/output contracts, zero-runtime-dependency rule), the rubric constraints for adding commands, the version-bump-every-PR rule, and flags that the installed console script is spark, not dgx-spark-cli.
+
+### Fixed
+
+- **`explain spark` now resolves to the root entry.** The agent-first rubric's `explain_self` check probes the `[project.scripts]` entry name (`spark`), but the explain catalog only aliased the root under the dist name (`dgx-spark-cli`), so `teken cli doctor . --strict` failed `explain_self` in CI. Added a `("spark",)` catalog alias (mirroring `("dgx-spark-cli",)`) and a regression test.
+
 ## [0.1.1] - 2026-05-26
 
 ### Changed
