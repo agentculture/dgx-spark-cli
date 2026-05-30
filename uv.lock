@@ -155,7 +155,7 @@ wheels = [
 ]
 
 [[package]]
-name = "culture-agent-template"
+name = "dgx-spark-cli"
 version = "0.1.1"
 source = { editable = "." }
 
