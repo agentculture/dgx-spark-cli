@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-05-31
+
+### Added
+
+- vendor outsource skill (explore/review/write) from guildmaster — hand a scoped repo task to convertible for a diverse second opinion
+
 ## [0.3.1] - 2026-05-30
 
 ### Fixed
