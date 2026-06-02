@@ -56,6 +56,8 @@ def _overview_sections() -> list:
                 "Deterministic, AI-free watchdog over the spark.probe collectors.",
                 "POSTs to a generic webhook when a threshold is crossed, and again "
                 "when it clears (edge-triggered — no spam).",
+                "On 'run', posts a one-shot 'started watching' liveness alert "
+                "(toggle: notify_on_start).",
             ],
         },
         {
@@ -197,6 +199,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"[monitor] watching every {cfg.interval_seconds}s -> {cfg.webhook_url} "
         f"({cfg.webhook_format}); Ctrl-C to stop"
     )
+    # One-shot "started working" liveness ping, before the loop. notify_started
+    # is bounded and never raises, so a slow/dead webhook neither stalls nor
+    # crashes startup — a failed ping is just a diagnostic.
+    if cfg.notify_on_start and cfg.webhook_url:
+        ok, error = engine.notify_started(cfg)
+        outcome = "sent" if ok else f"FAILED ({error})"
+        emit_diagnostic(f"[monitor] startup alert -> {outcome}")
     engine.run_loop(cfg, state_path=default_state_path(), emit=_emit_cycle)
     return 0
 
@@ -255,6 +264,7 @@ def _config_sections(cfg: mconfig.Config, errors: list) -> list:
                 f"webhook: {cfg.webhook_url or '(unset)'}",
                 f"format: {cfg.webhook_format}",
                 f"interval: {cfg.interval_seconds}s, re-notify every {cfg.renotify_cycles} cycles",
+                f"startup alert: {'on' if cfg.notify_on_start else 'off'} (notify_on_start)",
                 f"source: {cfg.source_path or '(defaults — no file)'}",
             ],
         },

@@ -29,7 +29,15 @@ jobs:
 
       - run: uv sync
 
+      # DGX_SPARK_TEST_WEBHOOK_URL is scoped to this step only (not the whole
+      # job) so the secret isn't exposed to unrelated steps. It enables the live
+      # webhook test (tests/test_monitor_live.py), which POSTs a real "started
+      # watching" alert. Empty on fork PRs / unconfigured repos -> that test
+      # self-skips. When set, each same-repo run posts one alert to the channel
+      # (intentional liveness heartbeat for the watchdog's own delivery path).
       - run: uv run pytest -n auto --cov=spark --cov-report=xml:coverage.xml --cov-report=term -v
+        env:
+          DGX_SPARK_TEST_WEBHOOK_URL: ${{ secrets.DGX_SPARK_TEST_WEBHOOK_URL }}
 
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''

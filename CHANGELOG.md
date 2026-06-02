@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-02
+
+### Added
+
+- `monitor run` posts a one-shot "started watching" liveness alert on startup, so a watchdog that silently fails to come up is noticed by the absence of its heartbeat rather than the absence of an alert that should have fired. A failed startup POST is logged but never blocks the loop.
+- `notify_on_start` config flag (default `true`) toggles the startup alert; it is surfaced in `monitor config` and the monitor.json scaffold.
+- Env-gated live webhook test (`tests/test_monitor_live.py`, reads `DGX_SPARK_TEST_WEBHOOK_URL`) that POSTs a real startup alert and asserts 2xx delivery; auto-detects Discord/Slack/generic format and self-skips when the variable is unset (fork PRs / contributors).
+
 ## [0.3.1] - 2026-05-30
 
 ### Fixed
