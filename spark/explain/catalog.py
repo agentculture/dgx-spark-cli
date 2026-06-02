@@ -280,8 +280,9 @@ container health, and subsystem availability (nvidia-smi / docker going dark).
 
 JSON at `~/.config/dgx-spark/monitor.json` (`DGX_SPARK_WEBHOOK_URL` overrides the
 webhook). `webhook_format` is `generic` (default), `slack`, or `discord`. A
-numeric threshold of `null` disables that check. Zero runtime dependencies —
-`urllib` does the POST, never raising into the loop.
+numeric threshold of `null` disables that check. `notify_on_start` (default
+`true`) sends a one-shot "started watching" alert when `run` comes up. Zero
+runtime dependencies — `urllib` does the POST, never raising into the loop.
 """
 
 _MONITOR_CHECK = """\
@@ -307,6 +308,10 @@ The foreground watch loop — what the systemd unit runs as its `ExecStart`. Pol
 every `interval_seconds`, delivering transitions to the webhook; stops cleanly on
 SIGTERM/SIGINT. Requires a valid webhook (errors with exit 2 otherwise).
 `--interval N` overrides the poll period; `--config PATH` selects the config.
+
+On start it POSTs a one-shot **"started watching"** liveness alert (so a watchdog
+that silently fails to come up is noticed). A failed startup POST is logged but
+never blocks the loop. Disable it with `notify_on_start: false` in the config.
 """
 
 _MONITOR_TEST = """\
@@ -322,6 +327,7 @@ _MONITOR_CONFIG = """\
 Show the resolved configuration (thresholds, webhook, interval) and whether it
 is valid. `--init` writes a scaffold config file you can edit. `--json`,
 `--config PATH`. The webhook may also come from `DGX_SPARK_WEBHOOK_URL`.
+`notify_on_start` (default `true`) toggles the startup liveness alert.
 """
 
 _MONITOR_SYSTEMD = """\

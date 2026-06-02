@@ -53,6 +53,7 @@ Monitoring (AI-free background watchdog)
   dgx-spark-cli monitor config     Show/scaffold thresholds + webhook.
   dgx-spark-cli monitor install    Manage a systemd --user service.
 Webhooks on catastrophes (memory/disk/thermal/GPU/containers); no AI.
+On 'run' it also POSTs a one-shot "started watching" alert (notify_on_start).
 
 Machine-readable output
 -----------------------

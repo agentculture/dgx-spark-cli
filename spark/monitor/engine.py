@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime
 import signal
+import socket
 import time
 from typing import Callable, Optional
 
@@ -109,6 +110,44 @@ def run_once(
         "delivered": deliverable,
         "error": error,
     }
+
+
+def notify_started(
+    config: Config,
+    *,
+    host: Optional[str] = None,
+    ts: Optional[str] = None,
+    opener: Optional[notify.Opener] = None,
+) -> tuple[bool, Optional[str]]:
+    """POST a one-shot "started watching" liveness alert. Never raises.
+
+    Unlike threshold alerts this is **not** edge-triggered through the state file
+    — it is a single ping fired each time the watch loop comes up, so a watchdog
+    that silently fails to start is noticed by the absence of this heartbeat
+    rather than by the absence of an alert that should have fired.
+    """
+    hostname = host or socket.gethostname() or "?"
+    event = {
+        "status": "started",
+        "alert": {
+            "key": "monitor_started",
+            "severity": "info",
+            "message": f"monitor started watching {hostname} (every {config.interval_seconds}s)",
+        },
+    }
+    payload = notify.render_payload(
+        [event],
+        host=hostname,
+        ts=ts or _now_iso(),
+        fmt=config.webhook_format,
+    )
+    return notify.post(
+        config.webhook_url,
+        payload,
+        timeout=config.timeout_seconds,
+        retries=config.retries,
+        opener=opener,
+    )
 
 
 def run_loop(

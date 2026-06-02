@@ -77,6 +77,17 @@ def test_config_corrupt_file_falls_back(tmp_path) -> None:
     assert cfg.thresholds == mconfig.DEFAULT_THRESHOLDS
 
 
+def test_config_notify_on_start_default_and_roundtrip(tmp_path) -> None:
+    # On by default, and surfaced in to_dict so the scaffold/config view show it.
+    assert Config().notify_on_start is True
+    assert Config().to_dict()["notify_on_start"] is True
+    # An explicit false in the config file disables the startup liveness alert.
+    path = tmp_path / "monitor.json"
+    path.write_text(json.dumps({"webhook_url": "https://x", "notify_on_start": False}))
+    cfg = mconfig.load(str(path), environ={})
+    assert cfg.notify_on_start is False
+
+
 # --- rules ----------------------------------------------------------------
 
 
@@ -185,6 +196,23 @@ def test_render_payload_formats() -> None:
     assert "content" in discord and "boom" in discord["content"]
 
 
+def test_render_text_started_status() -> None:
+    events = [
+        {
+            "status": "started",
+            "alert": {
+                "key": "monitor_started",
+                "severity": "info",
+                "message": "monitor started watching h (every 60s)",
+            },
+        }
+    ]
+    text = notify.render_payload(events, host="h", ts="t", fmt="slack")["text"]
+    assert "monitor started watching h" in text
+    # The started line uses the green-circle glyph, distinct from severity/resolved.
+    assert "\U0001f7e2" in text
+
+
 def test_post_rejects_non_http() -> None:
     ok, err = notify.post("file:///etc/passwd", {})
     assert ok is False and "http" in err
@@ -277,6 +305,23 @@ def test_run_loop_max_cycles(tmp_path) -> None:
         max_cycles=3,
     )
     assert ran == 3 and len(results) == 3
+
+
+def test_notify_started_posts_started_event() -> None:
+    cfg = Config(webhook_url="https://x/y", interval_seconds=42)
+    seen = {}
+
+    def opener(req, timeout):
+        seen["body"] = json.loads(req.data)
+        return _Resp(200)
+
+    ok, err = engine.notify_started(cfg, host="dgx", opener=opener)
+    assert ok is True and err is None
+    event = seen["body"]["events"][0]
+    assert event["status"] == "started"
+    assert event["alert"]["key"] == "monitor_started"
+    assert event["alert"]["severity"] == "info"
+    assert "dgx" in event["alert"]["message"] and "42s" in event["alert"]["message"]
 
 
 def test_snapshot_runs_on_host() -> None:

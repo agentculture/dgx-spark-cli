@@ -20,6 +20,7 @@ _USER_AGENT = f"dgx-spark-cli-monitor/{__version__}"
 
 _SEVERITY_EMOJI = {"critical": "\U0001f534", "warning": "\U0001f7e0"}  # red / orange circle
 _RESOLVED_EMOJI = "✅"  # check mark
+_STARTED_EMOJI = "\U0001f7e2"  # green circle — the watchdog itself coming alive
 
 # An opener takes (Request, timeout) and returns a response-like object.
 Opener = Callable[[urllib.request.Request, float], object]
@@ -29,8 +30,11 @@ def _render_text(events: list[dict], host: str, ts: str) -> str:
     lines = [f"{host} — dgx-spark monitor @ {ts}"]
     for event in events:
         alert = event.get("alert", {})
-        if event.get("status") == "resolved":
+        status = event.get("status")
+        if status == "resolved":
             lines.append(f"{_RESOLVED_EMOJI} resolved: {alert.get('key')}")
+        elif status == "started":
+            lines.append(f"{_STARTED_EMOJI} {alert.get('message', alert.get('key'))}")
         else:
             emoji = _SEVERITY_EMOJI.get(alert.get("severity"), "\U0001f514")
             lines.append(f"{emoji} {alert.get('message', alert.get('key'))}")

@@ -82,6 +82,8 @@ def test_run_requires_webhook(capsys) -> None:
 
 def test_run_happy_path_calls_loop(monkeypatch) -> None:
     monkeypatch.setenv("DGX_SPARK_WEBHOOK_URL", "https://example.com/hook")
+    # cmd_run now fires a startup alert before the loop — keep it off the network.
+    monkeypatch.setattr("spark.monitor.notify.post", lambda url, payload, **kw: (True, None))
     called = {}
     monkeypatch.setattr(
         "spark.cli._commands.monitor.engine.run_loop",
@@ -127,8 +129,44 @@ def test_enable_disable_uninstall_stubbed(monkeypatch, capsys) -> None:
 
 def test_run_accepts_json_flag(monkeypatch) -> None:
     monkeypatch.setenv("DGX_SPARK_WEBHOOK_URL", "https://example.com/hook")
+    monkeypatch.setattr("spark.monitor.notify.post", lambda url, payload, **kw: (True, None))
     monkeypatch.setattr("spark.cli._commands.monitor.engine.run_loop", lambda cfg, **kw: 0)
     assert main(["monitor", "run", "--json"]) == 0
+
+
+def test_run_posts_startup_alert(monkeypatch, capsys) -> None:
+    monkeypatch.setenv("DGX_SPARK_WEBHOOK_URL", "https://example.com/hook")
+    posts = []
+
+    def fake_post(url, payload, **kw):
+        posts.append(payload)
+        return True, None
+
+    monkeypatch.setattr("spark.monitor.notify.post", fake_post)
+    monkeypatch.setattr("spark.cli._commands.monitor.engine.run_loop", lambda cfg, **kw: 0)
+    rc = main(["monitor", "run"])
+    assert rc == 0
+    event = posts[0]["events"][0]
+    assert event["status"] == "started" and event["alert"]["key"] == "monitor_started"
+    assert "startup alert -> sent" in capsys.readouterr().err
+
+
+def test_run_notify_on_start_false_suppresses_alert(monkeypatch, tmp_path) -> None:
+    cfg_path = tmp_path / "m.json"
+    cfg_path.write_text(
+        json.dumps({"webhook_url": "https://example.com/hook", "notify_on_start": False})
+    )
+    posts = []
+
+    def fake_post(url, payload, **kw):
+        posts.append(payload)
+        return True, None
+
+    monkeypatch.setattr("spark.monitor.notify.post", fake_post)
+    monkeypatch.setattr("spark.cli._commands.monitor.engine.run_loop", lambda cfg, **kw: 0)
+    rc = main(["monitor", "run", "--config", str(cfg_path)])
+    assert rc == 0
+    assert posts == []  # startup alert suppressed by notify_on_start=false
 
 
 def test_enable_failure_routes_to_stderr(monkeypatch, capsys) -> None:

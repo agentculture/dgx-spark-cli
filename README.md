@@ -93,6 +93,12 @@ container health, and subsystem availability. Thresholds live in the config
 (`null` disables a check); `webhook_format` is `generic` (default), `slack`, or
 `discord`.
 
+When `monitor run` starts (the systemd `ExecStart`), it POSTs a one-shot
+**"started watching"** liveness alert — so a watchdog that silently fails to come
+up is noticed by the absence of its heartbeat, not just the absence of an alert.
+A failed startup POST is logged, never fatal. Set `notify_on_start: false` in the
+config to disable it.
+
 ## Make it your own
 
 1. Rename the package `spark/` and the `dgx-spark-cli`
