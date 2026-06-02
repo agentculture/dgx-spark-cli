@@ -88,6 +88,17 @@ def test_config_notify_on_start_default_and_roundtrip(tmp_path) -> None:
     assert cfg.notify_on_start is False
 
 
+def test_config_notify_on_start_string_false_disables(tmp_path) -> None:
+    # A mistyped string "false" must disable it too (plain bool("false") is True).
+    path = tmp_path / "monitor.json"
+    path.write_text(json.dumps({"webhook_url": "https://x", "notify_on_start": "false"}))
+    cfg = mconfig.load(str(path), environ={})
+    assert cfg.notify_on_start is False
+    # ...while a truthy string stays on.
+    path.write_text(json.dumps({"webhook_url": "https://x", "notify_on_start": "yes"}))
+    assert mconfig.load(str(path), environ={}).notify_on_start is True
+
+
 # --- rules ----------------------------------------------------------------
 
 
@@ -322,6 +333,34 @@ def test_notify_started_posts_started_event() -> None:
     assert event["alert"]["key"] == "monitor_started"
     assert event["alert"]["severity"] == "info"
     assert "dgx" in event["alert"]["message"] and "42s" in event["alert"]["message"]
+
+
+def test_notify_started_is_bounded_and_does_not_retry() -> None:
+    # Even when the config asks for many retries / a long timeout, the one-shot
+    # startup ping stays bounded so a dead webhook can't stall the watch loop.
+    cfg = Config(webhook_url="https://x", retries=5, timeout_seconds=99)
+    calls = {"n": 0}
+
+    def failing(req, timeout):
+        calls["n"] += 1
+        assert timeout <= engine._STARTUP_TIMEOUT
+        raise urllib.error.URLError("down")
+
+    ok, err = engine.notify_started(cfg, host="h", opener=failing)
+    assert ok is False
+    assert calls["n"] == 1  # retries=0 for the startup ping
+
+
+def test_notify_started_never_raises_on_internal_error() -> None:
+    # The "never raises" contract must hold even for an unexpected exception type
+    # that notify.post does not itself catch — startup must not crash.
+    cfg = Config(webhook_url="https://x/y")
+
+    def boom(req, timeout):
+        raise RuntimeError("kaboom")
+
+    ok, err = engine.notify_started(cfg, host="h", opener=boom)
+    assert ok is False and "kaboom" in err
 
 
 def test_snapshot_runs_on_host() -> None:

@@ -199,9 +199,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"[monitor] watching every {cfg.interval_seconds}s -> {cfg.webhook_url} "
         f"({cfg.webhook_format}); Ctrl-C to stop"
     )
-    # One-shot "started working" liveness ping, before the loop. A failed ping is
-    # a diagnostic, never fatal — the watchdog must still run even if the webhook
-    # is briefly flaky at startup.
+    # One-shot "started working" liveness ping, before the loop. notify_started
+    # is bounded and never raises, so a slow/dead webhook neither stalls nor
+    # crashes startup — a failed ping is just a diagnostic.
     if cfg.notify_on_start and cfg.webhook_url:
         ok, error = engine.notify_started(cfg)
         outcome = "sent" if ok else f"FAILED ({error})"

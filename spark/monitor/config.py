@@ -75,6 +75,21 @@ class Config:
         }
 
 
+_FALSE_STRINGS = frozenset({"false", "0", "no", "off", "", "none", "null"})
+
+
+def _as_bool(value: object) -> bool:
+    """Coerce a JSON value to bool, honoring string forms.
+
+    Plain ``bool("false")`` is ``True``, so a mistyped ``"notify_on_start":
+    "false"`` would silently leave the flag on. Treat the common string spellings
+    of false as false; everything else uses normal truthiness.
+    """
+    if isinstance(value, str):
+        return value.strip().lower() not in _FALSE_STRINGS
+    return bool(value)
+
+
 def _from_dict(data: dict) -> Config:
     cfg = Config()
     cfg.webhook_url = data.get("webhook_url", cfg.webhook_url)
@@ -83,7 +98,7 @@ def _from_dict(data: dict) -> Config:
     cfg.renotify_cycles = int(data.get("renotify_cycles", cfg.renotify_cycles))
     cfg.timeout_seconds = float(data.get("timeout_seconds", cfg.timeout_seconds))
     cfg.retries = int(data.get("retries", cfg.retries))
-    cfg.notify_on_start = bool(data.get("notify_on_start", cfg.notify_on_start))
+    cfg.notify_on_start = _as_bool(data.get("notify_on_start", cfg.notify_on_start))
     thresholds = dict(DEFAULT_THRESHOLDS)
     if isinstance(data.get("thresholds"), dict):
         thresholds.update(data["thresholds"])

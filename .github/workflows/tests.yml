@@ -15,15 +15,8 @@ jobs:
     # `env.SONAR_TOKEN != ''` — `secrets.*` isn't allowed in `if:`. This
     # makes the step a no-op on fork PRs (where the secret isn't injected)
     # and on any repo that hasn't configured the token yet.
-    #
-    # DGX_SPARK_TEST_WEBHOOK_URL enables the live webhook test
-    # (tests/test_monitor_live.py), which POSTs a real "started watching" alert.
-    # Empty on fork PRs / unconfigured repos -> that test self-skips. When set,
-    # every same-repo run posts one alert to the channel (intentional liveness
-    # heartbeat for the watchdog's own delivery path).
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      DGX_SPARK_TEST_WEBHOOK_URL: ${{ secrets.DGX_SPARK_TEST_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -36,7 +29,15 @@ jobs:
 
       - run: uv sync
 
+      # DGX_SPARK_TEST_WEBHOOK_URL is scoped to this step only (not the whole
+      # job) so the secret isn't exposed to unrelated steps. It enables the live
+      # webhook test (tests/test_monitor_live.py), which POSTs a real "started
+      # watching" alert. Empty on fork PRs / unconfigured repos -> that test
+      # self-skips. When set, each same-repo run posts one alert to the channel
+      # (intentional liveness heartbeat for the watchdog's own delivery path).
       - run: uv run pytest -n auto --cov=spark --cov-report=xml:coverage.xml --cov-report=term -v
+        env:
+          DGX_SPARK_TEST_WEBHOOK_URL: ${{ secrets.DGX_SPARK_TEST_WEBHOOK_URL }}
 
       - name: SonarCloud Scan
         if: env.SONAR_TOKEN != ''

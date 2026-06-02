@@ -19,6 +19,7 @@ from spark.monitor.rules import evaluate
 from spark.probe import containers, disk, gpu, host, memory, thermal
 
 _MAX_INTERVAL = 3600  # hard ceiling on the poll interval (seconds)
+_STARTUP_TIMEOUT = 5.0  # cap the one-shot startup ping so a dead webhook can't stall the loop
 
 
 def _now_iso() -> str:
@@ -125,29 +126,40 @@ def notify_started(
     — it is a single ping fired each time the watch loop comes up, so a watchdog
     that silently fails to start is noticed by the absence of this heartbeat
     rather than by the absence of an alert that should have fired.
+
+    The ping is deliberately bounded (short timeout, no retries) and fully
+    guarded: a slow or dead webhook delays startup by at most ``_STARTUP_TIMEOUT``
+    and any error is returned as ``(False, reason)`` instead of raising, so the
+    watch loop always starts promptly. The next real alert — or the next service
+    restart — re-establishes contact with the webhook.
     """
-    hostname = host or socket.gethostname() or "?"
-    event = {
-        "status": "started",
-        "alert": {
-            "key": "monitor_started",
-            "severity": "info",
-            "message": f"monitor started watching {hostname} (every {config.interval_seconds}s)",
-        },
-    }
-    payload = notify.render_payload(
-        [event],
-        host=hostname,
-        ts=ts or _now_iso(),
-        fmt=config.webhook_format,
-    )
-    return notify.post(
-        config.webhook_url,
-        payload,
-        timeout=config.timeout_seconds,
-        retries=config.retries,
-        opener=opener,
-    )
+    try:
+        hostname = host or socket.gethostname() or "?"
+        event = {
+            "status": "started",
+            "alert": {
+                "key": "monitor_started",
+                "severity": "info",
+                "message": (
+                    f"monitor started watching {hostname} (every {config.interval_seconds}s)"
+                ),
+            },
+        }
+        payload = notify.render_payload(
+            [event],
+            host=hostname,
+            ts=ts or _now_iso(),
+            fmt=config.webhook_format,
+        )
+        return notify.post(
+            config.webhook_url,
+            payload,
+            timeout=min(config.timeout_seconds, _STARTUP_TIMEOUT),
+            retries=0,
+            opener=opener,
+        )
+    except Exception as err:  # noqa: BLE001 — liveness ping must never crash startup
+        return False, str(err)
 
 
 def run_loop(
