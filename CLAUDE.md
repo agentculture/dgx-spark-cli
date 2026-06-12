@@ -140,9 +140,27 @@ merge/keep/discard menu. The `cicd` and `communicate` skills require `agex`
 
 ## Vendored skills — cite, don't edit
 
-`.claude/skills/` is vendored **cite-don't-import** from `guildmaster`
-(provenance + re-sync procedure in `docs/skill-sources.md`). Treat script bodies
-as read-only — they're excluded from markdownlint and Sonar. To update a skill,
-re-vendor from upstream rather than hand-editing; lift any needed change into
-guildmaster first. Every `SKILL.md` must carry `type: command` in frontmatter
+`.claude/skills/` is vendored **cite-don't-import** from `guildmaster` (and
+`ask-colleague` from its origin, `colleague`); provenance + re-sync procedure in
+`docs/skill-sources.md`. Treat script bodies as read-only — they're excluded from
+markdownlint and Sonar. To update a skill, **re-vendor from upstream rather than
+hand-editing**. A needed change to the upstream body is *requested* there, not
+made by us (see the repo-boundary rule below) — then re-vendored here byte-for-byte
+once upstream ships it. Every `SKILL.md` must carry `type: command` in frontmatter
 (load-bearing for the culture/claude `core.skill_loader`).
+
+## Repo boundary — only write here; request upstream via `/communicate`
+
+This agent **only writes to its own repository (`dgx-spark-cli`).** It never
+edits, commits to, or opens PRs in sibling/upstream repos (`colleague`,
+`guildmaster`, `steward`, …) — even when a fix obviously belongs there (e.g. a
+qodo finding on the vendored `ask-colleague` wrapper, whose origin is
+`colleague`).
+
+When a change is needed upstream, **request it via the `/communicate` skill** — it
+files a tracked GitHub issue on the sibling repo (auto-signed
+`- dgx-spark-cli (Claude)`). The upstream owner/agent makes the change in their
+repo; we then **re-vendor** the result here (cite-don't-import). The local half of
+the loop (re-vendor + version bump + PR in *this* repo) is ours; the upstream half
+is theirs. Do not branch, edit, or PR in another repo's checkout to "save a round
+trip" — that crosses the boundary and collides with whoever owns it.
