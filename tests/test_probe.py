@@ -108,13 +108,13 @@ def test_contention_unavailable_when_stat_missing() -> None:
     assert rep["available"] is False
 
 
-def test_contention_single_good_read_zeroes_iowait() -> None:
-    # Second read fails -> fall back to the first; iowait delta is 0, but the
-    # instantaneous blocked count still comes through.
+def test_contention_second_read_fail_iowait_is_none_not_zero() -> None:
+    # Second read fails: iowait can't be measured -> None ("n/a"), NOT a
+    # misleading 0%. The instantaneous blocked count still comes through.
     rep = contention.collect(_two_shot(_STAT_1, None), sleep=lambda _s: None)
     data = rep["data"]
     assert rep["available"] is True
-    assert data["iowait_pct"] == 0.0
+    assert data["iowait_pct"] is None
     assert data["blocked_procs"] == 10
 
 

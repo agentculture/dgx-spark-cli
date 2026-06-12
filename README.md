@@ -89,7 +89,8 @@ dgx-spark-cli monitor status            # service + currently firing alerts
 | `monitor install\|enable\|disable\|status\|uninstall` | Manage the systemd `--user` service. |
 
 Watches memory %, swap %, disk %, hottest sensor, GPU temp, load-per-core,
-container health, and subsystem availability. Thresholds live in the config
+I/O contention (iowait % + blocked processes), container health, and subsystem
+availability. Thresholds live in the config
 (`null` disables a check); `webhook_format` is `generic` (default), `slack`, or
 `discord`.
 

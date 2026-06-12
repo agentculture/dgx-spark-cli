@@ -77,18 +77,20 @@ def collect(
         return unavailable("contention", _STAT_PATH, "read /proc/stat on a Linux host")
     sleep(interval)
     second = sampler()
-    if second is None:
-        second = first  # one good read still yields blocked_procs; iowait delta is 0
 
-    blocked = _blocked_procs(second)
+    # blocked_procs is instantaneous — read it from the freshest good sample.
+    blocked = _blocked_procs(second if second is not None else first)
 
+    # iowait % needs a genuine two-sample delta. If the second read failed (or
+    # no jiffies elapsed) we leave it None — rendered as "n/a" — rather than
+    # fabricating a healthy-looking 0% from a degraded measurement.
     iowait_pct: Optional[float] = None
     s1 = _cpu_iowait_and_total(first)
-    s2 = _cpu_iowait_and_total(second)
+    s2 = _cpu_iowait_and_total(second) if second is not None else None
     if s1 is not None and s2 is not None:
         d_iowait = max(s2[0] - s1[0], 0)
         d_total = s2[1] - s1[1]
-        iowait_pct = pct(d_iowait, d_total) if d_total > 0 else 0.0
+        iowait_pct = pct(d_iowait, d_total) if d_total > 0 else None
 
     warnings: list[str] = []
     if iowait_pct is not None and iowait_pct >= _IOWAIT_WARN_PCT:
