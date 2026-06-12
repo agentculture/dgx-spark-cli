@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-12
+
+### Added
+
+- Monitor I/O-contention alerts: new `iowait_pct` (default 25%) and `blocked_procs` (default 8) thresholds, backed by a `spark.probe.contention` collector that samples `/proc/stat` for iowait %% and the blocked-process (D-state) count. Surfaces swap-thrash / I/O-starvation that the capacity thresholds (memory/swap %% full) miss.
+
 ## [0.4.0] - 2026-06-02
 
 ### Added

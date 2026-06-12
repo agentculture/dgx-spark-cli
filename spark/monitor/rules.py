@@ -136,6 +136,34 @@ def _load(snap: dict, th: dict, out: list) -> None:
         )
 
 
+def _contention(snap: dict, th: dict, out: list) -> None:
+    data = snap.get("contention") or {}
+    iowait = data.get("iowait_pct")
+    io_limit = _limit(th, "iowait_pct")
+    if iowait is not None and io_limit is not None and iowait >= io_limit:
+        out.append(
+            Alert(
+                "iowait_pct",
+                "warning",
+                f"iowait {iowait:.0f}% (>= {io_limit:.0f}%) — CPUs waiting on I/O",
+                round(iowait, 1),
+                io_limit,
+            )
+        )
+    blocked = _as_float(data.get("blocked_procs"))
+    blk_limit = _limit(th, "blocked_procs")
+    if blocked is not None and blk_limit is not None and blocked >= blk_limit:
+        out.append(
+            Alert(
+                "blocked_procs",
+                "warning",
+                f"{blocked:.0f} processes blocked on I/O (>= {blk_limit:.0f})",
+                round(blocked, 1),
+                blk_limit,
+            )
+        )
+
+
 def _containers(snap: dict, th: dict, out: list) -> None:
     if not th.get("container_unhealthy"):
         return
@@ -165,6 +193,6 @@ def _availability(snap: dict, th: dict, out: list) -> None:
 def evaluate(snapshot: dict, thresholds: dict) -> list[Alert]:
     """Return the alerts currently firing for ``snapshot`` under ``thresholds``."""
     alerts: list[Alert] = []
-    for check in (_memory, _disk, _thermal, _gpu, _load, _containers, _availability):
+    for check in (_memory, _disk, _thermal, _gpu, _load, _contention, _containers, _availability):
         check(snapshot, thresholds, alerts)
     return alerts

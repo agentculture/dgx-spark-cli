@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from spark.probe import (
     _run,
     containers,
+    contention,
     disk,
     gpu,
     memory,
@@ -64,6 +65,57 @@ def test_memory_unavailable_when_missing() -> None:
     rep = memory.collect("/no/such/meminfo")
     assert rep["available"] is False
     assert rep["remediation"]
+
+
+# --- contention -----------------------------------------------------------
+
+_STAT_1 = """\
+cpu  100 0 50 1000 200 0 0 0 0 0
+cpu0 50 0 25 500 100 0 0 0 0 0
+procs_running 2
+procs_blocked 10
+"""
+_STAT_2 = """\
+cpu  110 0 60 1100 500 0 0 0 0 0
+cpu0 55 0 30 550 250 0 0 0 0 0
+procs_running 1
+procs_blocked 22
+"""
+
+
+def _two_shot(*samples):
+    """A sampler that returns each ``samples`` value in turn, then the last."""
+    queue = list(samples)
+
+    def sampler():
+        return queue.pop(0) if len(queue) > 1 else queue[0]
+
+    return sampler
+
+
+def test_contention_computes_iowait_and_blocked() -> None:
+    rep = contention.collect(_two_shot(_STAT_1, _STAT_2), sleep=lambda _s: None)
+    data = rep["data"]
+    assert rep["available"] is True
+    # d_iowait = 300, d_total = (1770-1350) = 420 -> 71%; blocked from 2nd sample.
+    assert round(data["iowait_pct"]) == 71
+    assert data["blocked_procs"] == 22
+    assert len(rep["warnings"]) == 2  # high iowait + many blocked
+
+
+def test_contention_unavailable_when_stat_missing() -> None:
+    rep = contention.collect(lambda: None, sleep=lambda _s: None)
+    assert rep["available"] is False
+
+
+def test_contention_single_good_read_zeroes_iowait() -> None:
+    # Second read fails -> fall back to the first; iowait delta is 0, but the
+    # instantaneous blocked count still comes through.
+    rep = contention.collect(_two_shot(_STAT_1, None), sleep=lambda _s: None)
+    data = rep["data"]
+    assert rep["available"] is True
+    assert data["iowait_pct"] == 0.0
+    assert data["blocked_procs"] == 10
 
 
 # --- disk -----------------------------------------------------------------

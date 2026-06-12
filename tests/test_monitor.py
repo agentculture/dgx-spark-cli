@@ -24,6 +24,7 @@ _HOT_SNAPSHOT = {
     "gpu": {"gpu": {"temperature.gpu": "90"}},
     "containers": {"containers": [{"name": "c1", "status": "Up (unhealthy)"}]},
     "load": {"per_core": 5.0},
+    "contention": {"iowait_pct": 60.0, "blocked_procs": 22},
 }
 
 
@@ -110,6 +111,8 @@ def test_evaluate_fires_all_default_conditions() -> None:
     assert "thermal_max_c" in keys
     assert "gpu_temp_c" in keys
     assert "load_per_core" in keys
+    assert "iowait_pct" in keys
+    assert "blocked_procs" in keys
     assert "container:c1" in keys
 
 
@@ -123,6 +126,7 @@ def test_evaluate_clear_snapshot_is_silent() -> None:
         "gpu": {"gpu": {"temperature.gpu": "45"}},
         "containers": {"containers": [{"name": "ok", "status": "Up (healthy)"}]},
         "load": {"per_core": 0.1},
+        "contention": {"iowait_pct": 2.0, "blocked_procs": 1},
     }
     assert evaluate(calm, mconfig.DEFAULT_THRESHOLDS) == []
 
