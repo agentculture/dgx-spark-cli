@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-06-12
+
+### Changed
+
+- **Re-vendored the `ask-colleague` wrapper from colleague#186** to clear two qodo findings on PR #12, fixed at the origin (the wrapper is cite-don't-import — the fix is lifted into colleague, then re-vendored byte-identical here): (1) **`--json` flag (any verb)** — stdout now carries only the result JSON with diagnostics/digest on stderr, satisfying the CLI `--json` contract (qodo rule 824501); the drive verbs emit the normalized `TaskResult`, `feedback`/`clean` forward `--json` to colleague. (2) **per-verb `require_tools`** — the old blanket `python3`/`git`/`grep`/`mktemp` check failed `feedback`/`clean` (thin colleague pass-throughs) in minimal envs; now `feedback`/`clean` need only `git`, the drive verbs need `git`+`python3`+`mktemp` (`write --apply`/`--pr` drops `mktemp`), and `grep` is no longer hard-required. Wrapper-only; `SKILL.md` + prompts untouched.
 
 ## [0.5.1] - 2026-06-12
 
