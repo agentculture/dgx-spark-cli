@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-06-12
+
+### Changed
+
+- **Re-vendored the `ask-colleague` wrapper from colleague#186** (merged), clearing the qodo findings raised on the #12 re-vendor. The wrapper is cite-don't-import, so the fixes were lifted into the origin (colleague) and re-vendored byte-identical here: (1) **`--json` flag (any verb)** — stdout carries only the result JSON, with the human digest, the `write` preview diff, and partial-drive warnings all on stderr (qodo rule 824501); the drive verbs emit the normalized `TaskResult`, `feedback`/`clean` forward `--json` to colleague. In `--json` mode a non-gradable preview drops the dead `artifacts_path` (it pointed into a deleted worktree) and the `task:`/`grade:` hints go to stderr so stdout stays pure JSON. (2) **per-verb `require_tools`** — the old blanket `python3`/`git`/`grep`/`mktemp` check failed `feedback`/`clean` (thin colleague pass-throughs) in minimal envs; now `feedback`/`clean` need only `git`, the drive verbs need `git`+`python3`+`mktemp` (`write --apply`/`--pr` drops `mktemp`), and `grep` is no longer hard-required. `SKILL.md` gains a `--json` options row (its repo-specific provenance token preserved); prompts untouched.
+
 ## [0.5.1] - 2026-06-12
 
 ### Changed
