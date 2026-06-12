@@ -76,8 +76,9 @@ def _overview_sections() -> list:
             "items": [
                 f"file: {mconfig.default_config_path()}",
                 "env override: DGX_SPARK_WEBHOOK_URL",
-                "watches: memory, swap, disk, thermal, GPU temp, load, container "
-                "health, subsystem availability",
+                "watches: memory, swap, disk, thermal, GPU temp, load, I/O "
+                "contention (iowait + blocked procs), container health, "
+                "subsystem availability",
             ],
         },
     ]

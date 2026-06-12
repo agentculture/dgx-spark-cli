@@ -29,6 +29,8 @@ DEFAULT_THRESHOLDS: dict[str, object] = {
     "thermal_max_c": 90.0,
     "gpu_temp_c": 87.0,
     "load_per_core": 4.0,
+    "iowait_pct": 25.0,
+    "blocked_procs": 8.0,
     "container_unhealthy": True,
     "subsystem_down": True,
 }

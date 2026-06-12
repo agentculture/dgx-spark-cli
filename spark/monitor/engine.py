@@ -16,7 +16,7 @@ from typing import Callable, Optional
 from spark.monitor import notify, state
 from spark.monitor.config import Config
 from spark.monitor.rules import evaluate
-from spark.probe import containers, disk, gpu, host, memory, thermal
+from spark.probe import containers, contention, disk, gpu, host, memory, thermal
 
 _MAX_INTERVAL = 3600  # hard ceiling on the poll interval (seconds)
 _STARTUP_TIMEOUT = 5.0  # cap the one-shot startup ping so a dead webhook can't stall the loop
@@ -33,6 +33,7 @@ def snapshot(runner: Optional[Callable] = None) -> dict:
     therm = thermal.collect()
     g = gpu.collect(runner)
     cnt = containers.collect(runner)
+    cont = contention.collect()
     facts = host.facts(runner)
 
     load1 = (facts.get("loadavg") or "0 0 0").split()[0]
@@ -51,12 +52,14 @@ def snapshot(runner: Optional[Callable] = None) -> dict:
             "thermal": therm.get("available", False),
             "gpu": g.get("available", False),
             "containers": cnt.get("available", False),
+            "contention": cont.get("available", False),
         },
         "memory": mem.get("data", {}),
         "disk": dsk.get("data", {}),
         "thermal": therm.get("data", {}),
         "gpu": g.get("data", {}),
         "containers": cnt.get("data", {}),
+        "contention": cont.get("data", {}),
         "load": {"load1": load1f, "cpu_count": cpu, "per_core": per_core},
     }
 
