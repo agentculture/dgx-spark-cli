@@ -24,6 +24,7 @@ from spark.probe._report import pct, report, unavailable
 _IOWAIT_WARN_PCT = 15.0
 _BLOCKED_WARN = 4
 
+_STAT_PATH = "/proc/stat"
 _SAMPLE_INTERVAL = 0.5  # seconds between the two /proc/stat reads for the delta
 
 # /proc/stat aggregate cpu line: cpu user nice system idle iowait irq ...
@@ -33,7 +34,7 @@ Sampler = Callable[[], Optional[str]]
 
 
 def _read_stat() -> Optional[str]:
-    return _run.read_text("/proc/stat")
+    return _run.read_text(_STAT_PATH)
 
 
 def _cpu_iowait_and_total(text: str) -> Optional[tuple[int, int]]:
@@ -73,7 +74,7 @@ def collect(
     """Return an I/O-contention report. ``sampler``/``sleep`` are injectable for tests."""
     first = sampler()
     if first is None:
-        return unavailable("contention", "/proc/stat", "read /proc/stat on a Linux host")
+        return unavailable("contention", _STAT_PATH, "read /proc/stat on a Linux host")
     sleep(interval)
     second = sampler()
     if second is None:
@@ -107,6 +108,4 @@ def collect(
         },
     ]
     data = {"iowait_pct": iowait_pct, "blocked_procs": blocked}
-    return report(
-        "contention", source="/proc/stat", sections=sections, warnings=warnings, data=data
-    )
+    return report("contention", source=_STAT_PATH, sections=sections, warnings=warnings, data=data)
