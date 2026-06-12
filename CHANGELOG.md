@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-06-13
+
+### Changed
+
+- Documented the **repo-boundary rule** in `CLAUDE.md`: this agent only writes to its own repository. Changes needed upstream — e.g. a qodo finding on the cite-don't-import `ask-colleague` wrapper, whose origin is `colleague` — are *requested* via the `/communicate` skill (a tracked issue on the sibling repo), never by editing or opening PRs in another repo's checkout, then re-vendored here once upstream ships them.
+
 ## [0.5.1] - 2026-06-12
 
 ### Changed
