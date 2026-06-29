@@ -21,3 +21,10 @@ ignores:
   - ".teken/**"
   # Vendored skills are cited verbatim from guildmaster — do not reformat them.
   - ".claude/skills/**"
+  # devague-generated specs/plans (/think, /spec-to-plan) — verbatim exporter
+  # output, re-generated on export; not hand-authored docs. Owner is the
+  # devague exporter, not this repo.
+  - "docs/specs/**"
+  - "docs/plans/**"
+  # devague working state (frames, plans, review artifacts) is generated.
+  - ".devague/**"
