@@ -11,6 +11,12 @@ Three skills (`think`, `spec-to-plan`, `assign-to-workforce`) originate in
 only **re-broadcasts** them. Cite guildmaster's copy; track devague as the true
 origin.
 
+One skill — `ask-colleague` — is the exception: it is vendored **directly from
+its origin repo, [`agentculture/colleague`](https://github.com/agentculture/colleague)**,
+not via guildmaster. Cite colleague's copy; the wrapper script is
+cite-don't-import (read-only here), and any needed fix is lifted into colleague
+and re-vendored byte-identical (per the repo-boundary rule in `CLAUDE.md`).
+
 Every vendored `SKILL.md` carries `type: command`. dgx-spark-cli
 declares a culture agent (`culture.yaml`, `backend: claude`), and
 `core.skill_loader` silently skips any `SKILL.md` lacking `type:` — so the field
@@ -29,6 +35,7 @@ is load-bearing, even where guildmaster's upstream copy omits it.
 | `think` | `../guildmaster/.claude/skills/think/` | **devague** (re-broadcast via guildmaster) | idea→spec leg of the devague workflow chain. Verbatim (already carried `type: command` at guildmaster). Origin/broadcast prose left verbatim. | 2026-05-26 (guildmaster 0.6.0) |
 | `spec-to-plan` | `../guildmaster/.claude/skills/spec-to-plan/` | **devague** (re-broadcast via guildmaster) | spec→plan leg of the devague workflow chain. Verbatim (already carried `type: command`). | 2026-05-26 (guildmaster 0.6.0) |
 | `assign-to-workforce` | `../guildmaster/.claude/skills/assign-to-workforce/` | **devague** (re-broadcast via guildmaster) | plan→parallel-implementation leg of the devague workflow chain. Verbatim (already carried `type: command`). | 2026-05-26 (guildmaster 0.6.0) |
+| `ask-colleague` | `../colleague/.claude/skills/ask-colleague/` | **colleague** (its own origin, not guildmaster) | Cite-don't-import wrapper for delegating a scoped task to a different backend/model. Vendored **directly from colleague**, not via guildmaster. Re-vendored byte-identical per colleague#186 (qodo fixes lifted into the origin: `--json` keeps stdout pure result-JSON on every verb; per-verb `require_tools`). `SKILL.md` keeps `type: command` and its repo-specific provenance token; the `.sh` body is read-only. | 2026-06-12 (colleague#186) |
 
 ## Re-sync procedure
 
