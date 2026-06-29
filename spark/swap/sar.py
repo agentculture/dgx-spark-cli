@@ -62,21 +62,52 @@ def _pick(*values):
     return None
 
 
+def _extract_series_entry(entry: object) -> Optional[dict]:
+    """Normalize one sadf ``statistics`` entry to a series point, or None to skip.
+
+    Swap/mem ``%used`` live under different keys per sysstat version: older sadf
+    exposes ``swap-pages/%swpused`` and ``memory/%memused``, while current Ubuntu
+    sysstat folds both into the ``memory`` block as ``swpused-percent`` /
+    ``memused-percent``. We try each layout in turn and never raise on an
+    unexpected shape.
+    """
+    if not isinstance(entry, dict):
+        return None
+    memory = entry.get("memory")
+    swap_pages = entry.get("swap-pages")
+    mem_block = memory if isinstance(memory, dict) else {}
+    swap_block = swap_pages if isinstance(swap_pages, dict) else {}
+
+    swap_pct = _pick(
+        swap_block.get("%swpused"),
+        mem_block.get("swpused-percent"),
+        mem_block.get("%swpused"),
+    )
+    mem_pct = _pick(mem_block.get("%memused"), mem_block.get("memused-percent"))
+    if swap_pct is None or mem_pct is None:
+        return None
+
+    try:
+        return {
+            "ts": _build_ts(entry.get("timestamp", {})),
+            "swap_used_pct": round(float(swap_pct), 2),
+            "mem_used_pct": round(float(mem_pct), 2),
+        }
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_sadf_json(raw: str) -> list[dict]:
     """Parse ``sadf -j`` stdout into a normalized swap/mem series.
 
-    Navigates defensively with ``.get()`` everywhere — the sysstat JSON
-    schema varies across distro versions so we never assume a key is present.
-    Swap/mem ``%used`` live under different keys per version: older sadf
-    exposes ``swap-pages/%swpused`` and ``memory/%memused``, while current
-    Ubuntu sysstat folds both into the ``memory`` block as
-    ``swpused-percent`` / ``memused-percent``. We try each layout in turn.
-    Entries from which neither swap nor mem %used can be read are silently
-    skipped; we never raise KeyError/TypeError/ValueError on unexpected shapes.
+    Navigates defensively with ``.get()`` everywhere — the sysstat JSON schema
+    varies across distro versions so we never assume a key is present. Per-entry
+    normalization (and the multi-version key layout) lives in
+    :func:`_extract_series_entry`; entries it cannot read are skipped.
     """
     try:
         data = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:  # json.JSONDecodeError is a subclass of ValueError
         return []
 
     series: list[dict] = []
@@ -91,41 +122,9 @@ def _parse_sadf_json(raw: str) -> list[dict]:
             if not isinstance(statistics, list):
                 continue
             for entry in statistics:
-                if not isinstance(entry, dict):
-                    continue
-
-                ts_block = entry.get("timestamp", {})
-                ts = _build_ts(ts_block)
-
-                memory = entry.get("memory")
-                swap_pages = entry.get("swap-pages")
-                mem_block = memory if isinstance(memory, dict) else {}
-                swap_block = swap_pages if isinstance(swap_pages, dict) else {}
-
-                swap_pct = _pick(
-                    swap_block.get("%swpused"),
-                    mem_block.get("swpused-percent"),
-                    mem_block.get("%swpused"),
-                )
-                mem_pct = _pick(
-                    mem_block.get("%memused"),
-                    mem_block.get("memused-percent"),
-                )
-
-                if swap_pct is None or mem_pct is None:
-                    continue
-
-                try:
-                    series.append(
-                        {
-                            "ts": ts,
-                            "swap_used_pct": round(float(swap_pct), 2),
-                            "mem_used_pct": round(float(mem_pct), 2),
-                        }
-                    )
-                except (TypeError, ValueError):
-                    continue
-
+                point = _extract_series_entry(entry)
+                if point is not None:
+                    series.append(point)
     except Exception:  # noqa: BLE001  # pragma: no cover — belt-and-suspenders guard
         return series
 
@@ -137,18 +136,17 @@ def _parse_sadf_json(raw: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def read_swap_trend(hours: int = 24, *, runner: _Runner = run_tool) -> dict:
+def read_swap_trend(*, runner: _Runner = run_tool) -> dict:
     """Return recent swap/memory trend from sysstat/sadf.
 
     Prefers ``sadf -j`` (JSON output, easiest to parse reliably).  If the
     ``sadf`` call returns ``None`` (tool absent or failed), falls through to a
     best-effort text ``sar`` parse; if that is also ``None``, returns an
-    ``available: False`` sentinel without raising.
+    ``available: False`` sentinel without raising. The window is whatever the
+    activity file covers (typically the recent 24 h); we intentionally do not
+    pass a computed ``-s`` start time, which would couple the call to real time.
 
     Args:
-        hours: Advisory history window in hours.  Passed to sadf so the OS
-            can filter the activity file, but tests drive a canned runner and
-            do not depend on real-time output.
         runner: Injectable tool runner; defaults to
             :func:`spark.probe._run.run_tool`.  Tests supply a fake runner so
             no real ``sar``/``sadf`` binary is required.

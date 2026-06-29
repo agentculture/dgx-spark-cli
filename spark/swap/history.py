@@ -201,6 +201,38 @@ def _iter_rows(store_dir: Path):
                 yield row
 
 
+def _parse_sample_row(row: dict):
+    """Coerce a stored JSONL row to ``(ts, pid, comm, rss_kb, swap_kb)`` or None."""
+    try:
+        return (
+            float(row["ts"]),
+            int(row["pid"]),
+            str(row["comm"]),
+            int(row.get("rss_kb", 0)),
+            int(row.get("swap_kb", 0)),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _accumulate(groups: dict, pid: int, comm: str, rss_kb: int, swap_kb: int) -> None:
+    """Fold one sample into the per-(pid, comm) peak-swap / peak-rss accumulator."""
+    key = (pid, comm)
+    existing = groups.get(key)
+    if existing is None:
+        groups[key] = {
+            "pid": pid,
+            "comm": comm,
+            "peak_swap_kb": swap_kb,
+            "peak_rss_kb": rss_kb,
+        }
+        return
+    if swap_kb > existing["peak_swap_kb"]:
+        existing["peak_swap_kb"] = swap_kb
+    if rss_kb > existing["peak_rss_kb"]:
+        existing["peak_rss_kb"] = rss_kb
+
+
 def query(
     window_seconds: int,
     top_n: int = 10,
@@ -224,30 +256,13 @@ def query(
 
     groups: dict[tuple[int, str], dict] = {}
     for row in _iter_rows(base):
-        try:
-            ts = float(row["ts"])
-            pid = int(row["pid"])
-            comm = str(row["comm"])
-            rss_kb = int(row.get("rss_kb", 0))
-            swap_kb = int(row.get("swap_kb", 0))
-        except (KeyError, TypeError, ValueError):
+        parsed = _parse_sample_row(row)
+        if parsed is None:
             continue
+        ts, pid, comm, rss_kb, swap_kb = parsed
         if ts < start or ts > end:
             continue
-        key = (pid, comm)
-        existing = groups.get(key)
-        if existing is None:
-            groups[key] = {
-                "pid": pid,
-                "comm": comm,
-                "peak_swap_kb": swap_kb,
-                "peak_rss_kb": rss_kb,
-            }
-        else:
-            if swap_kb > existing["peak_swap_kb"]:
-                existing["peak_swap_kb"] = swap_kb
-            if rss_kb > existing["peak_rss_kb"]:
-                existing["peak_rss_kb"] = rss_kb
+        _accumulate(groups, pid, comm, rss_kb, swap_kb)
 
     ranked = sorted(
         groups.values(),

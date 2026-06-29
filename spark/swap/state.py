@@ -128,6 +128,63 @@ def _unavailable_result() -> dict:
     }
 
 
+def _compute_mem(mem_raw: dict) -> dict:
+    """Derive the ``mem`` block (bytes + percentages) from parsed /proc/meminfo."""
+    total = mem_raw.get("MemTotal", 0)
+    available_mem = mem_raw.get("MemAvailable", mem_raw.get("MemFree", 0))
+    free = mem_raw.get("MemFree", 0)
+    used = max(total - available_mem, 0)
+    swap_total = mem_raw.get("SwapTotal", 0)
+    swap_free = mem_raw.get("SwapFree", 0)
+    swap_used = max(swap_total - swap_free, 0)
+    return {
+        "total_bytes": total,
+        "available_bytes": available_mem,
+        "free_bytes": free,
+        "used_bytes": used,
+        "used_pct": round(used / total * 100, 2) if total else 0.0,
+        "swap_total_bytes": swap_total,
+        "swap_free_bytes": swap_free,
+        "swap_used_bytes": swap_used,
+        "swap_used_pct": round(swap_used / swap_total * 100, 2) if swap_total else 0.0,
+    }
+
+
+def _read_swappiness(read: Callable[[str], Optional[str]]) -> Optional[int]:
+    """Read /proc/sys/vm/swappiness as an int, or None when absent/unparseable."""
+    text = read("/proc/sys/vm/swappiness")
+    if text is None:
+        return None
+    try:
+        return int(text.strip())
+    except ValueError:
+        return None
+
+
+def _compute_backing(devices: list, read, statvfs) -> dict:
+    """Resolve the backing filesystem (mount, fs type, free bytes) of the first
+    file-type swap device; all-``None`` when there is no file-backed swap."""
+    backing: dict = {"swapfile": None, "fs_type": None, "mount": None, "free_bytes": None}
+    first_file = next((d for d in devices if d["type"] == "file"), None)
+    if first_file is None:
+        return backing
+    swapfile = first_file["name"]
+    backing["swapfile"] = swapfile
+    mounts_text = read("/proc/mounts")
+    if mounts_text is None:
+        return backing
+    mount, fs_type = _find_mount(swapfile, mounts_text)
+    backing["mount"] = mount
+    backing["fs_type"] = fs_type
+    if mount is not None:
+        try:
+            sv = statvfs(mount)
+            backing["free_bytes"] = sv.f_bavail * sv.f_frsize
+        except OSError:
+            pass
+    return backing
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -166,68 +223,11 @@ def collect_swap_state(
     if meminfo_text is None or swaps_text is None:
         return _unavailable_result()
 
-    # --- /proc/meminfo ---
-    mem_raw = _parse_meminfo(meminfo_text)
-    total = mem_raw.get("MemTotal", 0)
-    available_mem = mem_raw.get("MemAvailable", mem_raw.get("MemFree", 0))
-    free = mem_raw.get("MemFree", 0)
-    used = max(total - available_mem, 0)
-    swap_total = mem_raw.get("SwapTotal", 0)
-    swap_free = mem_raw.get("SwapFree", 0)
-    swap_used = max(swap_total - swap_free, 0)
-
-    used_pct: float = round(used / total * 100, 2) if total else 0.0
-    swap_used_pct: float = round(swap_used / swap_total * 100, 2) if swap_total else 0.0
-
-    # --- /proc/swaps ---
     devices = _parse_swaps(swaps_text)
-
-    # --- /proc/sys/vm/swappiness (optional) ---
-    swappiness: Optional[int] = None
-    swappiness_text = read("/proc/sys/vm/swappiness")
-    if swappiness_text is not None:
-        try:
-            swappiness = int(swappiness_text.strip())
-        except ValueError:
-            pass
-
-    # --- backing filesystem (first file-type device only) ---
-    first_file = next((d for d in devices if d["type"] == "file"), None)
-    backing: dict = {
-        "swapfile": None,
-        "fs_type": None,
-        "mount": None,
-        "free_bytes": None,
-    }
-    if first_file is not None:
-        swapfile = first_file["name"]
-        backing["swapfile"] = swapfile
-        mounts_text = read("/proc/mounts")
-        if mounts_text is not None:
-            mount, fs_type = _find_mount(swapfile, mounts_text)
-            backing["mount"] = mount
-            backing["fs_type"] = fs_type
-            if mount is not None:
-                try:
-                    sv = statvfs(mount)
-                    backing["free_bytes"] = sv.f_bavail * sv.f_frsize
-                except OSError:
-                    pass
-
     return {
         "available": True,
-        "swappiness": swappiness,
-        "mem": {
-            "total_bytes": total,
-            "available_bytes": available_mem,
-            "free_bytes": free,
-            "used_bytes": used,
-            "used_pct": used_pct,
-            "swap_total_bytes": swap_total,
-            "swap_free_bytes": swap_free,
-            "swap_used_bytes": swap_used,
-            "swap_used_pct": swap_used_pct,
-        },
+        "swappiness": _read_swappiness(read),
+        "mem": _compute_mem(_parse_meminfo(meminfo_text)),
         "devices": devices,
-        "backing": backing,
+        "backing": _compute_backing(devices, read, statvfs),
     }

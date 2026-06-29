@@ -43,10 +43,12 @@ _APPLY_STEP_TIMEOUT = 600.0
 
 # digits (optional decimal) + optional binary unit (K/M/G/T/P) + optional i/B.
 # Suffixes are binary (1024-based): 32G == 32GiB == 32GB. A bare number is bytes.
-_SIZE_RE = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTPkmgtp]?)[iI]?[bB]?\s*$")
+# All quantifiers are BOUNDED ({1,20}/{0,6}/{0,4}) so the pattern cannot backtrack
+# super-linearly (ReDoS); callers strip() first, so no leading/trailing \s* is needed.
+_SIZE_RE = re.compile(r"^(\d{1,20}(?:\.\d{1,6})?)\s{0,4}([KMGTPkmgtp]?)[iI]?[bB]?$")
 _SIZE_UNITS = {"": 1, "K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4, "P": 1024**5}
 
-_DURATION_RE = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([smhdSMHD]?)\s*$")
+_DURATION_RE = re.compile(r"^(\d{1,20}(?:\.\d{1,6})?)\s{0,4}([smhdSMHD]?)$")
 _DURATION_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 
 
@@ -57,7 +59,7 @@ def _parse_size(text: str) -> int:
     bytes. Raises :class:`CliError` (exit 1) on an unparseable or non-positive
     value.
     """
-    match = _SIZE_RE.match(text or "")
+    match = _SIZE_RE.match((text or "").strip())
     if match is None:
         raise CliError(
             EXIT_USER_ERROR,
@@ -80,7 +82,7 @@ def _parse_duration(text: str) -> int:
     Suffixes are case-insensitive; a bare number is seconds. Raises
     :class:`CliError` (exit 1) on an unparseable or non-positive value.
     """
-    match = _DURATION_RE.match(text or "")
+    match = _DURATION_RE.match((text or "").strip())
     if match is None:
         raise CliError(
             EXIT_USER_ERROR,
@@ -170,58 +172,69 @@ def _trend_summary(trend: dict) -> dict:
     return {"recent_swap_used_pct": recent, "avg_swap_used_pct": avg, "samples": len(pcts)}
 
 
+def _mem_section(mem: dict) -> dict:
+    return {
+        "title": "Memory",
+        "items": [
+            f"total: {_fmt_bytes(mem.get('total_bytes'))}",
+            f"available: {_fmt_bytes(mem.get('available_bytes'))}",
+            f"used: {mem.get('used_pct', 0.0)}%",
+        ],
+    }
+
+
+def _swap_section(state: dict, mem: dict) -> dict:
+    return {
+        "title": "Swap",
+        "items": [
+            f"total: {_fmt_bytes(mem.get('swap_total_bytes'))}",
+            f"used: {_fmt_bytes(mem.get('swap_used_bytes'))} ({mem.get('swap_used_pct', 0.0)}%)",
+            f"swappiness: {state.get('swappiness')}",
+            f"devices: {len(state.get('devices') or [])}",
+        ],
+    }
+
+
+def _devices_section(devices: list) -> dict | None:
+    """Render the per-device section, or None when there are no devices."""
+    if not devices:
+        return None
+    items = []
+    for dev in devices:
+        size = dev.get("size_bytes") or 0
+        used = dev.get("used_bytes") or 0
+        pct = round(used / size * 100, 1) if size else 0.0
+        items.append(
+            f"{dev.get('name')} ({dev.get('type')}): "
+            f"{_fmt_bytes(size)} used {pct}% prio {dev.get('priority')}"
+        )
+    return {"title": "Devices", "items": items}
+
+
+def _trend_section(trend: dict, summary: dict) -> dict:
+    if not trend.get("available"):
+        return {"title": "Trend", "items": ["unavailable (no sysstat/sar history)"]}
+    return {
+        "title": "Trend",
+        "items": [
+            f"source: {trend.get('source')}",
+            f"recent swap used: {summary['recent_swap_used_pct']}%",
+            f"avg swap used: {summary['avg_swap_used_pct']}%",
+            f"samples: {summary['samples']}",
+        ],
+    }
+
+
 def _status_sections(state: dict, trend: dict, summary: dict) -> list:
     if not state.get("available"):
         sections = [{"title": "Swap", "items": ["unavailable (could not read /proc swap sources)"]}]
     else:
         mem = state.get("mem") or {}
-        sections = [
-            {
-                "title": "Memory",
-                "items": [
-                    f"total: {_fmt_bytes(mem.get('total_bytes'))}",
-                    f"available: {_fmt_bytes(mem.get('available_bytes'))}",
-                    f"used: {mem.get('used_pct', 0.0)}%",
-                ],
-            },
-            {
-                "title": "Swap",
-                "items": [
-                    f"total: {_fmt_bytes(mem.get('swap_total_bytes'))}",
-                    f"used: {_fmt_bytes(mem.get('swap_used_bytes'))} "
-                    f"({mem.get('swap_used_pct', 0.0)}%)",
-                    f"swappiness: {state.get('swappiness')}",
-                    f"devices: {len(state.get('devices') or [])}",
-                ],
-            },
-        ]
-        devices = state.get("devices") or []
-        if devices:
-            items = []
-            for dev in devices:
-                size = dev.get("size_bytes") or 0
-                used = dev.get("used_bytes") or 0
-                pct = round(used / size * 100, 1) if size else 0.0
-                items.append(
-                    f"{dev.get('name')} ({dev.get('type')}): "
-                    f"{_fmt_bytes(size)} used {pct}% prio {dev.get('priority')}"
-                )
-            sections.append({"title": "Devices", "items": items})
-
-    if trend.get("available"):
-        sections.append(
-            {
-                "title": "Trend",
-                "items": [
-                    f"source: {trend.get('source')}",
-                    f"recent swap used: {summary['recent_swap_used_pct']}%",
-                    f"avg swap used: {summary['avg_swap_used_pct']}%",
-                    f"samples: {summary['samples']}",
-                ],
-            }
-        )
-    else:
-        sections.append({"title": "Trend", "items": ["unavailable (no sysstat/sar history)"]})
+        sections = [_mem_section(mem), _swap_section(state, mem)]
+        devices_section = _devices_section(state.get("devices") or [])
+        if devices_section is not None:
+            sections.append(devices_section)
+    sections.append(_trend_section(trend, summary))
     return sections
 
 
@@ -256,21 +269,20 @@ def cmd_history(args: argparse.Namespace) -> int:
             {"subject": "swap history", "window_seconds": window_seconds, "top": rows},
             json_mode=True,
         )
-        return 0
-    if not rows:
+    elif not rows:
         emit_result(
             "swap history: no history recorded yet "
             "(run 'dgx-spark-cli swap sample', or schedule it on a timer)",
             json_mode=False,
         )
-        return 0
-    items = [
-        f"pid {r['pid']} {r['comm']}: peak swap {_fmt_bytes(r['peak_swap_kb'] * 1024)}, "
-        f"peak rss {_fmt_bytes(r['peak_rss_kb'] * 1024)}"
-        for r in rows
-    ]
-    sections = [{"title": f"Top consumers (last {window_seconds}s)", "items": items}]
-    emit_result(render_sections("swap history", sections), json_mode=False)
+    else:
+        items = [
+            f"pid {r['pid']} {r['comm']}: peak swap {_fmt_bytes(r['peak_swap_kb'] * 1024)}, "
+            f"peak rss {_fmt_bytes(r['peak_rss_kb'] * 1024)}"
+            for r in rows
+        ]
+        sections = [{"title": f"Top consumers (last {window_seconds}s)", "items": items}]
+        emit_result(render_sections("swap history", sections), json_mode=False)
     return 0
 
 
@@ -342,16 +354,15 @@ def cmd_grow(args: argparse.Namespace) -> int:
             apply=True,
             runner=lambda name, a: run_capture(name, a, timeout=_APPLY_STEP_TIMEOUT),
         )
-        _emit_grow_result(result, json_mode)
-        return 0
+    else:
+        # Dry-run (default): preview the exact step plan on stderr, structured
+        # result on stdout, mutate nothing.
+        result = apply_grow_plan(plan, apply=False)
+        emit_diagnostic("WARNING: this will modify swap (dry-run — nothing changed; pass --apply)")
+        for step in result.get("steps") or []:
+            argv = " ".join(step["argv"]) if step.get("argv") else "(note — nothing to run)"
+            emit_diagnostic(f"  - {step['desc']}: {argv}")
 
-    # Dry-run (default): preview the exact step plan on stderr, structured
-    # result on stdout, mutate nothing.
-    result = apply_grow_plan(plan, apply=False)
-    emit_diagnostic("WARNING: this will modify swap (dry-run — nothing changed; pass --apply)")
-    for step in result.get("steps") or []:
-        argv = " ".join(step["argv"]) if step.get("argv") else "(note — nothing to run)"
-        emit_diagnostic(f"  - {step['desc']}: {argv}")
     _emit_grow_result(result, json_mode)
     return 0
 

@@ -83,27 +83,12 @@ def _fstab_line(swapfile: str) -> str:
     return f"{swapfile} none swap sw 0 0"
 
 
-def build_grow_plan(
-    target_size_bytes: int,
-    *,
-    state: dict,
-    ephemeral: bool = False,
-    swapfile: str = "/swap.img",
-) -> GrowPlan:
-    """Build a :class:`GrowPlan` for an in-place swapfile resize.
+def _validate_growable(state: dict, swapfile: str, target_size_bytes: int):
+    """Refuse unsafe grows; return ``(current_size_bytes, free_bytes)``.
 
-    ``target_size_bytes`` is already in bytes (human-size parsing belongs to the
-    CLI layer). ``state`` is the documented swap/memory snapshot. Raises
-    :class:`CliError` (never returns a plan) when the operation is unsafe; see
-    the module docstring for the refusal conditions.
+    Raises :class:`CliError` for a non-swapfile host (exit 1) or an insufficient
+    backing filesystem (exit 2). Pure; no system access.
     """
-    if target_size_bytes <= 0:
-        raise CliError(
-            EXIT_USER_ERROR,
-            f"Invalid target swap size: {target_size_bytes} bytes (must be positive).",
-            remediation="Pass a positive target size (the CLI parses e.g. 32G into bytes).",
-        )
-
     backing = state.get("backing") or {}
     devices = state.get("devices") or []
     has_file_device = any(dev.get("type") == "file" for dev in devices)
@@ -120,9 +105,9 @@ def build_grow_plan(
         )
 
     current = _current_size_bytes(state, swapfile)
+    free_bytes = backing.get("free_bytes")
     needed = target_size_bytes - current
 
-    free_bytes = backing.get("free_bytes")
     # Refusal (exit 2): the resize would not fit on the backing filesystem.
     if free_bytes is not None and needed > free_bytes:
         raise CliError(
@@ -136,12 +121,15 @@ def build_grow_plan(
                 "size, or place the swapfile on a larger volume."
             ),
         )
+    return current, free_bytes
 
+
+def _grow_warnings(mem: dict, free_bytes, ephemeral: bool) -> list[str]:
+    """Build the (non-blocking) hazard warnings for a grow plan."""
     warnings: list[str] = []
 
     # Hazard: swapoff must page all in-use swap back into RAM; if it does not fit,
     # swapoff fails with ENOMEM. Warn (do not block) and recommend a 2nd swapfile.
-    mem = state.get("mem") or {}
     swap_used = int(mem.get("swap_used_bytes") or 0)
     available = int(mem.get("available_bytes") or 0)
     if swap_used > available:
@@ -164,12 +152,13 @@ def build_grow_plan(
             "Ephemeral resize: this applies to the current boot only and will not "
             "persist across a reboot (no fstab entry is written)."
         )
+    return warnings
 
-    steps: list[dict] = [
-        {
-            "desc": f"Disable swap on {swapfile} (swapoff)",
-            "argv": ["swapoff", swapfile],
-        },
+
+def _resize_steps(swapfile: str, target_size_bytes: int) -> list[dict]:
+    """The ordered in-place resize steps (swapoff -> fallocate -> chmod -> mkswap -> swapon)."""
+    return [
+        {"desc": f"Disable swap on {swapfile} (swapoff)", "argv": ["swapoff", swapfile]},
         {
             "desc": f"Resize {swapfile} to {_human(target_size_bytes)} (fallocate)",
             "argv": ["fallocate", "-l", str(target_size_bytes), swapfile],
@@ -178,40 +167,59 @@ def build_grow_plan(
             "desc": f"Restrict {swapfile} to root-only (chmod 600)",
             "argv": ["chmod", "600", swapfile],
         },
-        {
-            "desc": f"Format {swapfile} as swap (mkswap)",
-            "argv": ["mkswap", swapfile],
-        },
-        {
-            "desc": f"Re-enable swap on {swapfile} (swapon)",
-            "argv": ["swapon", swapfile],
-        },
+        {"desc": f"Format {swapfile} as swap (mkswap)", "argv": ["mkswap", swapfile]},
+        {"desc": f"Re-enable swap on {swapfile} (swapon)", "argv": ["swapon", swapfile]},
     ]
 
+
+def _fstab_step(state: dict, swapfile: str) -> dict:
+    """The persistence step: a note if fstab already has the entry, else an idempotent ensure."""
+    if state.get("fstab_present") is True:
+        # State tells us the entry already exists: a note, not an edit step.
+        return {
+            "desc": f"fstab entry for {swapfile} already present; no change needed",
+            "argv": [],
+        }
+    # Cannot tell from state -> emit an idempotent ensure step.
+    quoted = shlex.quote(_fstab_line(swapfile))
+    return {
+        "desc": f"Ensure persistent fstab entry for {swapfile}",
+        "argv": [
+            "sh",
+            "-c",
+            f"grep -qxF {quoted} {_FSTAB_PATH} || printf '%s\\n' {quoted} >> {_FSTAB_PATH}",
+        ],
+    }
+
+
+def build_grow_plan(
+    target_size_bytes: int,
+    *,
+    state: dict,
+    ephemeral: bool = False,
+    swapfile: str = "/swap.img",
+) -> GrowPlan:
+    """Build a :class:`GrowPlan` for an in-place swapfile resize.
+
+    ``target_size_bytes`` is already in bytes (human-size parsing belongs to the
+    CLI layer). ``state`` is the documented swap/memory snapshot. Raises
+    :class:`CliError` (never returns a plan) when the operation is unsafe; see
+    the module docstring for the refusal conditions.
+    """
+    if target_size_bytes <= 0:
+        raise CliError(
+            EXIT_USER_ERROR,
+            f"Invalid target swap size: {target_size_bytes} bytes (must be positive).",
+            remediation="Pass a positive target size (the CLI parses e.g. 32G into bytes).",
+        )
+
+    current, free_bytes = _validate_growable(state, swapfile, target_size_bytes)
+    warnings = _grow_warnings(state.get("mem") or {}, free_bytes, ephemeral)
+
+    steps = _resize_steps(swapfile, target_size_bytes)
     persistent = not ephemeral
     if persistent:
-        if state.get("fstab_present") is True:
-            # State tells us the entry already exists: a note, not an edit step.
-            steps.append(
-                {
-                    "desc": f"fstab entry for {swapfile} already present; no change needed",
-                    "argv": [],
-                }
-            )
-        else:
-            # Cannot tell from state -> emit an idempotent ensure step.
-            quoted = shlex.quote(_fstab_line(swapfile))
-            steps.append(
-                {
-                    "desc": f"Ensure persistent fstab entry for {swapfile}",
-                    "argv": [
-                        "sh",
-                        "-c",
-                        f"grep -qxF {quoted} {_FSTAB_PATH} || "
-                        f"printf '%s\\n' {quoted} >> {_FSTAB_PATH}",
-                    ],
-                }
-            )
+        steps.append(_fstab_step(state, swapfile))
 
     return GrowPlan(
         steps=steps,
