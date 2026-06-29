@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-29
+
+### Added
+
+- spark swap noun group: status (swap+memory pressure and sar trend), grow (dry-run by default, --apply to mutate, --ephemeral, permanent in-place /swap.img resize, plan+run-as-root privilege model), history and sample (per-process memory/swap telemetry with bounded retention), and overview
+- spark/swap domain modules: state inspection, sar system-trend reader, per-process history store, grow planner and privileged executor
+
+### Fixed
+
+- sar trend reader now parses the modern Ubuntu sysstat sadf schema (swap/mem %used inside the memory block)
+
 ## [0.6.1] - 2026-06-29
 
 ### Changed
