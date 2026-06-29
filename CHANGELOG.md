@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-06-29
+
+### Changed
+
+- Documented the **repo-boundary rule** in `CLAUDE.md`: this agent only writes to its own repository. Changes needed upstream — e.g. a qodo finding on the cite-don't-import `ask-colleague` wrapper, whose origin is `colleague` — are *requested* via the `/communicate` skill (a tracked issue on the sibling repo), never by editing or opening PRs in another repo's checkout, then re-vendored here once upstream ships them.
+- Added the `ask-colleague` provenance row to `docs/skill-sources.md` (upstream/origin `colleague`, re-vendored per colleague#186), so the `CLAUDE.md` reference to that file as the ask-colleague provenance location is accurate.
+
 ## [0.6.0] - 2026-06-23
 
 ### Added

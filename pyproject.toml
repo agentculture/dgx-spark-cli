@@ -1,6 +1,6 @@
 [project]
 name = "dgx-spark-cli"
-version = "0.6.0"
+version = "0.6.1"
 description = "Agent and CLI for operating an NVIDIA DGX Spark (Grace-Blackwell) workstation — device setup, health/monitoring, and local AI/ML workload management."
 readme = "README.md"
 license = "MIT"
