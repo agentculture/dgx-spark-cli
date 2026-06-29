@@ -105,6 +105,18 @@ def _validate_growable(state: dict, swapfile: str, target_size_bytes: int):
         )
 
     current = _current_size_bytes(state, swapfile)
+
+    # Refusal (exit 1): 'grow' only grows. Reject a target that is not strictly
+    # larger than the current swapfile, which would otherwise emit a destructive
+    # 'fallocate -l <smaller>' that truncates (or no-ops) the swapfile.
+    if target_size_bytes <= current:
+        raise CliError(
+            EXIT_USER_ERROR,
+            f"Target size {_human(target_size_bytes)} is not larger than the current swap "
+            f"size {_human(current)}; 'swap grow' only grows (shrinking is unsupported).",
+            remediation="Pass a target larger than the current swap size.",
+        )
+
     free_bytes = backing.get("free_bytes")
     needed = target_size_bytes - current
 
@@ -180,14 +192,18 @@ def _fstab_step(state: dict, swapfile: str) -> dict:
             "desc": f"fstab entry for {swapfile} already present; no change needed",
             "argv": [],
         }
-    # Cannot tell from state -> emit an idempotent ensure step.
+    # Cannot tell from state -> emit an idempotent ensure step. The appended
+    # line is prefixed with a newline so a target /etc/fstab that lacks a final
+    # newline can't concatenate our entry onto its last line (which would also
+    # defeat the grep guard and append again on the next run). A leading blank
+    # line on an already-newline-terminated fstab is harmless (parsers skip it).
     quoted = shlex.quote(_fstab_line(swapfile))
     return {
         "desc": f"Ensure persistent fstab entry for {swapfile}",
         "argv": [
             "sh",
             "-c",
-            f"grep -qxF {quoted} {_FSTAB_PATH} || printf '%s\\n' {quoted} >> {_FSTAB_PATH}",
+            f"grep -qxF {quoted} {_FSTAB_PATH} || printf '\\n%s\\n' {quoted} >> {_FSTAB_PATH}",
         ],
     }
 

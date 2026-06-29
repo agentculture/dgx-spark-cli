@@ -227,3 +227,18 @@ def test_unknown_free_space_warns_not_blocks() -> None:
     plan = build_grow_plan(32 * GiB, state=state)
     assert isinstance(plan, GrowPlan)
     assert any(("disk" in w.lower()) or ("free" in w.lower()) for w in plan.warnings)
+
+
+def test_target_smaller_than_current_is_user_error() -> None:
+    # Baseline /swap.img is 8 GiB; a "grow" to 4 GiB would truncate it.
+    with pytest.raises(CliError) as excinfo:
+        build_grow_plan(4 * GiB, state=_state())
+    assert excinfo.value.code == 1
+    assert "grow" in str(excinfo.value).lower()
+
+
+def test_target_equal_to_current_is_user_error() -> None:
+    # No-op "grow" to the current 8 GiB size is rejected rather than planned.
+    with pytest.raises(CliError) as excinfo:
+        build_grow_plan(8 * GiB, state=_state())
+    assert excinfo.value.code == 1

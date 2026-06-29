@@ -135,14 +135,22 @@ def _append(store_dir: Path, payload: str, max_bytes: int) -> None:
     rotated = store_dir / _ROTATED_NAME
     data = payload.encode("utf-8")
     try:
+        # Per-process telemetry can name running processes — keep it owner-only.
         store_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(store_dir, 0o700)
+        except OSError:
+            pass  # best-effort; a pre-existing dir we cannot chmod is still usable
         try:
             active_size = active.stat().st_size
         except FileNotFoundError:
             active_size = 0
         if active_size > 0 and active_size + len(data) > max_bytes:
             os.replace(active, rotated)  # overwrite the single previous rotation
-        with active.open("a", encoding="utf-8") as fh:
+        # O_CREAT with mode 0o600 so a freshly created store file is owner-only
+        # (mode applies on creation only; a rotated file keeps its 0o600).
+        fd = os.open(active, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
             fh.write(payload)
     except OSError as exc:
         raise CliError(

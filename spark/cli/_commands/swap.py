@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 
 from spark.cli._errors import EXIT_USER_ERROR, CliError
 from spark.cli._output import emit_diagnostic, emit_result, render_sections
@@ -262,7 +263,10 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_history(args: argparse.Namespace) -> int:
     window_seconds = _parse_duration(getattr(args, "window", None) or "1h")
-    top_n = int(getattr(args, "top", 10) or 10)
+    # Respect an explicit --top 0 (don't let `or 10` override a falsy 0); clamp
+    # negatives to 0. Only a missing value falls back to the default of 10.
+    top = getattr(args, "top", 10)
+    top_n = 10 if top is None else max(int(top), 0)
     rows = query(window_seconds, top_n)
     if _json(args):
         emit_result(
@@ -360,7 +364,10 @@ def cmd_grow(args: argparse.Namespace) -> int:
         result = apply_grow_plan(plan, apply=False)
         emit_diagnostic("WARNING: this will modify swap (dry-run — nothing changed; pass --apply)")
         for step in result.get("steps") or []:
-            argv = " ".join(step["argv"]) if step.get("argv") else "(note — nothing to run)"
+            # shlex.join keeps the rendered plan copy-pasteable and correctly
+            # quoted — notably the `sh -c '<script>'` fstab step, which a plain
+            # space-join would misrender as if it were several bare arguments.
+            argv = shlex.join(step["argv"]) if step.get("argv") else "(note — nothing to run)"
             emit_diagnostic(f"  - {step['desc']}: {argv}")
 
     _emit_grow_result(result, json_mode)
