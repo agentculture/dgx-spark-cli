@@ -1,0 +1,308 @@
+{
+  "slug": "dgx-spark-cli-ships-a-swap-command-group-it-shows",
+  "title": "dgx-spark-cli ships a 'swap' command group: it shows swap pressure at a glance, safely grows swap (permanent by default, with a warning before applying and an --ephemeral escape hatch), and adds per-process memory/swap telemetry history so you can analyze WHAT is eating memory over time \u2014 not just that swap is full.",
+  "frame_slug": "dgx-spark-cli-ships-a-swap-command-group-it-shows",
+  "schema_version": 1,
+  "status": "exported",
+  "created": "2026-06-29T19:29:00Z",
+  "updated": "2026-06-29T19:38:34Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "dgx-spark-cli ships a 'swap' command group: it shows swap pressure at a glance, safely grows swap (permanent by default, with a warning before applying and an --ephemeral escape hatch), and adds per-process memory/swap telemetry history so you can analyze WHAT is eating memory over time \u2014 not just that swap is full."
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "All three capabilities ship as working 'spark swap' verbs (status, guarded grow, per-process history), each with --json and tests."
+    },
+    {
+      "id": "c2",
+      "kind": "audience",
+      "text": "A DGX Spark (Grace-Blackwell) operator running local AI/ML workloads who hits sustained swap pressure and needs to both relieve it and diagnose the cause from the spark CLI."
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "Every read/inspect verb produces useful output without root on this box's setup (swapfile /swap.img, sysstat present)."
+    },
+    {
+      "id": "c3",
+      "kind": "before_state",
+      "text": "Swap sits at ~99.99% for days (sar confirms avg 99.65%), RAM ~89% used with %commit ~129% (overcommitted). The operator has no spark-native way to see swap pressure, grow swap safely, or find which process is the memory hog over time."
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "The pressure is real and CLI-observable today: sar/proc show sustained ~100% swap util, reproducible before the feature lands."
+    },
+    {
+      "id": "c4",
+      "kind": "after_state",
+      "text": "From spark, the operator inspects swap/memory state, sees per-process memory history to identify the hog, and grows swap with one guarded command that is permanent by default and warns before acting."
+    },
+    {
+      "id": "h4",
+      "kind": "honesty",
+      "text": "End-to-end demo: grow relieves swap pressure AND a history verb names the top consuming process \u2014 both shown working together."
+    },
+    {
+      "id": "c5",
+      "kind": "why_it_matters",
+      "text": "On a unified-memory Grace-Blackwell box, sustained swap exhaustion risks OOM kills of ML workloads; relieving pressure AND attributing it to a process is what prevents recurrence, not just a one-time bump."
+    },
+    {
+      "id": "h5",
+      "kind": "honesty",
+      "text": "The deliverable includes the diagnostic (history), not just the bump \u2014 because without attribution swap refills after a grow."
+    },
+    {
+      "id": "c8",
+      "kind": "boundary",
+      "text": "v1 swap mutation targets the existing swapfile model (/swap.img on ext4, already in fstab); zram and dedicated swap partitions are out of scope for v1."
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "On a non-swapfile setup (zram/partition-only) grow refuses with a clear CliError instead of mutating something it doesn't understand."
+    },
+    {
+      "id": "c9",
+      "kind": "success_signal",
+      "text": "'spark swap status [--json]' reports current swap+memory pressure and recent trend, runs read-only without root, returns exit 0 even when a subsystem is missing."
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "'swap status' returns quickly, read-only, exit 0 with a missing subsystem \u2014 covered by a test injecting an absent probe."
+    },
+    {
+      "id": "c10",
+      "kind": "success_signal",
+      "text": "'spark swap grow <size>' prints the exact plan + a warning and mutates only after explicit confirmation; default config survives reboot (fstab entry present), --ephemeral makes no fstab change \u2014 asserted by a test on fstab state."
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "A test asserts: default grow yields a reboot-surviving config, --ephemeral yields none, and no mutation happens without confirmation."
+    },
+    {
+      "id": "c11",
+      "kind": "success_signal",
+      "text": "Per-process memory/swap history is queryable (e.g. 'spark swap history' / a processes-history verb) and surfaces the top consumers over a time window."
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "history returns top-N consumers over a window from recorded samples; an empty store degrades to a clear message, not a crash."
+    },
+    {
+      "id": "c12",
+      "kind": "requirement",
+      "text": "Swap increase is PERMANENT by default (survives reboot) with an --ephemeral (this-boot-only) flag."
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "Reboot survival is verifiable (fstab/state assertion) and --ephemeral is genuinely non-persistent."
+    },
+    {
+      "id": "c13",
+      "kind": "requirement",
+      "text": "A warning is shown and explicit confirmation required before any swap mutation."
+    },
+    {
+      "id": "h11",
+      "kind": "honesty",
+      "text": "No code path mutates swap without the warning+confirmation gate (an explicit non-interactive override, if any, is the only exception)."
+    },
+    {
+      "id": "c14",
+      "kind": "requirement",
+      "text": "Per-process and system memory/swap telemetry is recorded over time and queryable for analysis."
+    },
+    {
+      "id": "h12",
+      "kind": "honesty",
+      "text": "A sampler writes per-process samples on a schedule with BOUNDED retention/rotation so history can never fill the disk."
+    },
+    {
+      "id": "c15",
+      "kind": "requirement",
+      "text": "All read/inspect verbs work without root and never emit a Python traceback (route every failure through CliError)."
+    },
+    {
+      "id": "h13",
+      "kind": "honesty",
+      "text": "A test drives each verb's failure modes and asserts the CliError error:/hint: shape with no Python traceback."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Swap state inspection module (spark/swap/state.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "Parses /proc/swaps + /proc/meminfo + swappiness into a structured swap-state dict (devices, sizes, used_pct, backing fs) with no root.",
+        "A missing probe source sets available:false and never raises \u2014 a test injects an absent /proc node and asserts clean structured output."
+      ],
+      "deps": [],
+      "covers": [
+        "c9",
+        "h2",
+        "h7"
+      ]
+    },
+    {
+      "id": "t2",
+      "summary": "System-trend reader over existing sysstat/sar (spark/swap/sar.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "Reads recent swap/mem trend from sar (prefers sadf -j JSON) into a normalized series; absent sysstat returns available:false without raising.",
+        "A captured-sar fixture test asserts the parsed series; a second test asserts graceful degradation when the tool is missing."
+      ],
+      "deps": [],
+      "covers": [
+        "h3",
+        "c14"
+      ]
+    },
+    {
+      "id": "t3",
+      "summary": "Per-process memory/swap history store + sampler (spark/swap/history.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "record() appends one per-process sample (pid, comm, VmRSS, VmSwap from /proc/[pid]/status) as JSONL under XDG state ~/.local/state/dgx-spark/.",
+        "Bounded retention/rotation is enforced \u2014 a test writes past the cap and asserts the store is pruned and never exceeds the configured size/age.",
+        "query(window, top_n) returns top consumers over a window; an empty store returns a clear empty result, not an exception."
+      ],
+      "deps": [],
+      "covers": [
+        "c11",
+        "h9",
+        "c14",
+        "h12",
+        "h5"
+      ]
+    },
+    {
+      "id": "t4",
+      "summary": "Swap grow planner \u2014 pure plan builder (spark/swap/grow.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "Given size + current state, builds the exact ordered plan for in-place /swap.img resize (swapoff->fallocate->mkswap->swapon); permanent path asserts the fstab entry, --ephemeral omits fstab changes.",
+        "On a non-swapfile setup (zram-only / swap partition) it raises CliError with remediation instead of a plan \u2014 test asserts the refusal.",
+        "Refuses when free disk is insufficient for the new size; planner is pure (no mutation) and unit-tested without root."
+      ],
+      "deps": [],
+      "covers": [
+        "c8",
+        "h6",
+        "c12",
+        "h10"
+      ]
+    },
+    {
+      "id": "t5",
+      "summary": "Privileged grow executor \u2014 plan+run-as-root (spark/swap/apply.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "Executes a grow Plan only with --apply AND euid==0; without root it prints the plan+warning and exits env-error with a 'sudo ... --apply' hint, mutating nothing.",
+        "Without --apply nothing mutates (dry-run) regardless of euid \u2014 a mock-runner test asserts zero mutating calls.",
+        "With --apply+root the steps run via the _run helper; fstab persistence applied by default / skipped with --ephemeral \u2014 asserted against a mock runner + temp fstab."
+      ],
+      "deps": [
+        "t4"
+      ],
+      "covers": [
+        "c10",
+        "c13",
+        "h8",
+        "h11"
+      ]
+    },
+    {
+      "id": "t6",
+      "summary": "swap noun CLI module + wiring + catalog + learn + overview (spark/cli/_commands/swap.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "Registers a 'swap' noun (verbs: status, grow, history, sample, overview); every verb supports --json and routes all failures through CliError with no traceback \u2014 a failure-mode test asserts the error:/hint: shape.",
+        "Wired into _build_parser; explain catalog has an entry for every new swap path (test_every_catalog_path_resolves passes); 'swap overview' exists (rubric overview_cli_noun_exists); 'learn' mentions swap; full suite + 'teken cli doctor . --strict' green."
+      ],
+      "deps": [
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5"
+      ],
+      "covers": [
+        "c1",
+        "c15",
+        "h1",
+        "h13"
+      ]
+    },
+    {
+      "id": "t7",
+      "summary": "End-to-end demo test: pressure -> grow plan -> history attributes the hog (tests/test_swap_e2e.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "One test shows status surfacing sustained swap pressure from real /proc, grow producing a relief plan, and history naming the top consuming process \u2014 the full operator story.",
+        "Runs without root and with a subsystem absent, asserting useful output + exit 0 on the read paths."
+      ],
+      "deps": [
+        "t6"
+      ],
+      "covers": [
+        "c2",
+        "c3",
+        "c4",
+        "c5",
+        "h4"
+      ]
+    },
+    {
+      "id": "t8",
+      "summary": "Version bump, CHANGELOG, README + operator sampler-timer doc",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "pyproject.toml version bumped + Keep-a-Changelog entry added (version-check CI passes).",
+        "README documents the swap verbs and how to install the sampler timer so per-process history collects 'on a schedule'."
+      ],
+      "deps": [
+        "t6"
+      ],
+      "covers": []
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "text": "Resize-in-place needs swapoff, but swap is ~100% full AND RAM ~89% used \u2014 swapoff may fail (ENOMEM) with nowhere to move swapped pages. Planner/executor must detect this and recommend the add-second-swapfile fallback.",
+      "kind": "unknown_nonblocking",
+      "task_id": "t4"
+    },
+    {
+      "id": "r2",
+      "text": "sar/sadf output format and locale vary across sysstat versions; sadf -j JSON may be unavailable \u2014 reader must degrade gracefully.",
+      "kind": "unknown_nonblocking",
+      "task_id": "t2"
+    },
+    {
+      "id": "r3",
+      "text": "Privileged grow path can only be mock-tested in CI; real swapoff/fallocate/mkswap/swapon + fstab edit need root and are verified manually on the box.",
+      "kind": "follow_up",
+      "task_id": "t5"
+    }
+  ]
+}
