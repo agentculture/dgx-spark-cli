@@ -156,7 +156,7 @@ wheels = [
 
 [[package]]
 name = "dgx-spark-cli"
-version = "0.5.3"
+version = "0.5.2"
 source = { editable = "." }
 
 [package.dev-dependencies]

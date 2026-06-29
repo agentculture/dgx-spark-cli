@@ -5,11 +5,31 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.3] - 2026-06-13
+## [0.6.0] - 2026-06-23
+
+### Added
+
+- **Vendored the `remember` + `recall` memory skills from eidetic-cli**
+  (cite-don't-import) — the write/read halves of eidetic's shared
+  `~/.eidetic/memory` surface, so this agent (Claude and its colleague backend)
+  can persist facts across sessions and recall them later, sharing one store.
+  `remember` drives `eidetic remember` (idempotent upsert of one JSON record or
+  an NDJSON batch on stdin, dedup by id + content hash); `recall` drives
+  `eidetic recall` with four search modes — exact / approximate / keyword /
+  hybrid — each hit carrying text, full provenance metadata, a relevance score,
+  and a freshness signal. The `.sh` wrappers are byte-verbatim from eidetic-cli
+  (their first-party origin); each `SKILL.md` is localized only in the
+  illustrative `--scope <nick>` examples (Provenance keeps "First-party to
+  eidetic-cli"). Both default to this agent's PRIVATE scope, reading the suffix
+  from `culture.yaml`. Runtime dep: the `eidetic` CLI on PATH (else a local
+  eidetic-cli checkout with `uv`). Propagated by rollout-cli's `eidetic-memory`
+  recipe.
+
+## [0.5.2] - 2026-06-12
 
 ### Changed
 
-- Documented the **repo-boundary rule** in `CLAUDE.md`: this agent only writes to its own repository. Changes needed upstream — e.g. a qodo finding on the cite-don't-import `ask-colleague` wrapper, whose origin is `colleague` — are *requested* via the `/communicate` skill (a tracked issue on the sibling repo), never by editing or opening PRs in another repo's checkout, then re-vendored here once upstream ships them.
+- **Re-vendored the `ask-colleague` wrapper from colleague#186** (merged), clearing the qodo findings raised on the #12 re-vendor. The wrapper is cite-don't-import, so the fixes were lifted into the origin (colleague) and re-vendored byte-identical here: (1) **`--json` flag (any verb)** — stdout carries only the result JSON, with the human digest, the `write` preview diff, and partial-drive warnings all on stderr (qodo rule 824501); the drive verbs emit the normalized `TaskResult`, `feedback`/`clean` forward `--json` to colleague. In `--json` mode a non-gradable preview drops the dead `artifacts_path` (it pointed into a deleted worktree) and the `task:`/`grade:` hints go to stderr so stdout stays pure JSON. (2) **per-verb `require_tools`** — the old blanket `python3`/`git`/`grep`/`mktemp` check failed `feedback`/`clean` (thin colleague pass-throughs) in minimal envs; now `feedback`/`clean` need only `git`, the drive verbs need `git`+`python3`+`mktemp` (`write --apply`/`--pr` drops `mktemp`), and `grep` is no longer hard-required. `SKILL.md` gains a `--json` options row (its repo-specific provenance token preserved); prompts untouched.
 
 ## [0.5.1] - 2026-06-12
 
