@@ -1,0 +1,299 @@
+{
+  "slug": "dgx-spark-cli-ships-a-swap-command-group-it-shows",
+  "title": "dgx-spark-cli ships a 'swap' command group: it shows swap pressure at a glance, safely grows swap (permanent by default, with a warning before applying and an --ephemeral escape hatch), and adds per-process memory/swap telemetry history so you can analyze WHAT is eating memory over time \u2014 not just that swap is full.",
+  "schema_version": 1,
+  "status": "exported",
+  "created": "2026-06-29T19:13:59Z",
+  "updated": "2026-06-29T19:19:45Z",
+  "claims": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "dgx-spark-cli ships a 'swap' command group: it shows swap pressure at a glance, safely grows swap (permanent by default, with a warning before applying and an --ephemeral escape hatch), and adds per-process memory/swap telemetry history so you can analyze WHAT is eating memory over time \u2014 not just that swap is full.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h1",
+          "text": "All three capabilities ship as working 'spark swap' verbs (status, guarded grow, per-process history), each with --json and tests.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c2",
+      "kind": "audience",
+      "text": "A DGX Spark (Grace-Blackwell) operator running local AI/ML workloads who hits sustained swap pressure and needs to both relieve it and diagnose the cause from the spark CLI.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h2",
+          "text": "Every read/inspect verb produces useful output without root on this box's setup (swapfile /swap.img, sysstat present).",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c3",
+      "kind": "before_state",
+      "text": "Swap sits at ~99.99% for days (sar confirms avg 99.65%), RAM ~89% used with %commit ~129% (overcommitted). The operator has no spark-native way to see swap pressure, grow swap safely, or find which process is the memory hog over time.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h3",
+          "text": "The pressure is real and CLI-observable today: sar/proc show sustained ~100% swap util, reproducible before the feature lands.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c4",
+      "kind": "after_state",
+      "text": "From spark, the operator inspects swap/memory state, sees per-process memory history to identify the hog, and grows swap with one guarded command that is permanent by default and warns before acting.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h4",
+          "text": "End-to-end demo: grow relieves swap pressure AND a history verb names the top consuming process \u2014 both shown working together.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c5",
+      "kind": "why_it_matters",
+      "text": "On a unified-memory Grace-Blackwell box, sustained swap exhaustion risks OOM kills of ML workloads; relieving pressure AND attributing it to a process is what prevents recurrence, not just a one-time bump.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h5",
+          "text": "The deliverable includes the diagnostic (history), not just the bump \u2014 because without attribution swap refills after a grow.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c6",
+      "kind": "non_goal",
+      "text": "Not a memory autopilot: spark never auto-kills processes or grows swap unattended; mutation is always operator-initiated and confirmed.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c7",
+      "kind": "non_goal",
+      "text": "Does not replace sar/sysstat or the monitor watchdog, and ships no GUI/dashboard \u2014 it surfaces and queries telemetry from the CLI.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c8",
+      "kind": "boundary",
+      "text": "v1 swap mutation targets the existing swapfile model (/swap.img on ext4, already in fstab); zram and dedicated swap partitions are out of scope for v1.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h6",
+          "text": "On a non-swapfile setup (zram/partition-only) grow refuses with a clear CliError instead of mutating something it doesn't understand.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c9",
+      "kind": "success_signal",
+      "text": "'spark swap status [--json]' reports current swap+memory pressure and recent trend, runs read-only without root, returns exit 0 even when a subsystem is missing.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h7",
+          "text": "'swap status' returns quickly, read-only, exit 0 with a missing subsystem \u2014 covered by a test injecting an absent probe.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c10",
+      "kind": "success_signal",
+      "text": "'spark swap grow <size>' prints the exact plan + a warning and mutates only after explicit confirmation; default config survives reboot (fstab entry present), --ephemeral makes no fstab change \u2014 asserted by a test on fstab state.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h8",
+          "text": "A test asserts: default grow yields a reboot-surviving config, --ephemeral yields none, and no mutation happens without confirmation.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c11",
+      "kind": "success_signal",
+      "text": "Per-process memory/swap history is queryable (e.g. 'spark swap history' / a processes-history verb) and surfaces the top consumers over a time window.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h9",
+          "text": "history returns top-N consumers over a window from recorded samples; an empty store degrades to a clear message, not a crash.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c12",
+      "kind": "requirement",
+      "text": "Swap increase is PERMANENT by default (survives reboot) with an --ephemeral (this-boot-only) flag.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h10",
+          "text": "Reboot survival is verifiable (fstab/state assertion) and --ephemeral is genuinely non-persistent.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c13",
+      "kind": "requirement",
+      "text": "A warning is shown and explicit confirmation required before any swap mutation.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h11",
+          "text": "No code path mutates swap without the warning+confirmation gate (an explicit non-interactive override, if any, is the only exception).",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c14",
+      "kind": "requirement",
+      "text": "Per-process and system memory/swap telemetry is recorded over time and queryable for analysis.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h12",
+          "text": "A sampler writes per-process samples on a schedule with BOUNDED retention/rotation so history can never fill the disk.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c15",
+      "kind": "requirement",
+      "text": "All read/inspect verbs work without root and never emit a Python traceback (route every failure through CliError).",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [
+        {
+          "id": "h13",
+          "text": "A test drives each verb's failure modes and asserts the CliError error:/hint: shape with no Python traceback.",
+          "status": "confirmed"
+        }
+      ],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c16",
+      "kind": "assumption",
+      "text": "Default grow strategy is resizing the existing /swap.img in place (NVMe root has 2.7T free); fstab already references it so resize alone persists.",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c17",
+      "kind": "assumption",
+      "text": "System-stat history is read from the already-running sysstat/sar (7-day retention, 10-min cadence); spark adds the missing per-process history layer rather than re-collecting system stats.",
+      "origin": "llm",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c18",
+      "kind": "decision",
+      "text": "Privilege model: read/inspect verbs need no root; mutation uses plan+run-as-root. Without root, print the plan+warning and exit with a 'sudo spark swap grow ... --apply' hint; with euid 0, perform it. No self-invoked sudo.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c19",
+      "kind": "decision",
+      "text": "Confirmation model: 'swap grow' is DRY-RUN by default (prints warning + exact command plan, mutates nothing, exit 0); a deliberate second run with --apply performs it. --apply is also the unattended/automation path \u2014 no interactive prompt, no separate --yes flag.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c20",
+      "kind": "decision",
+      "text": "Grow default strategy: resize existing /swap.img in place (swapoff -> fallocate -> mkswap -> swapon); fstab already references it so it persists. --ephemeral performs the live grow but makes no fstab change.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    },
+    {
+      "id": "c21",
+      "kind": "decision",
+      "text": "History model: hybrid. Read existing sysstat/sar for system trend (CPU/mem/swap/IO, 9d already on disk); add a NEW bounded per-process sampler writing JSONL under ~/.local/state/dgx-spark/ with rotation/retention.",
+      "origin": "user",
+      "status": "confirmed",
+      "honesty_conditions": [],
+      "hard_questions": [],
+      "links": []
+    }
+  ],
+  "open_vagueness": []
+}
