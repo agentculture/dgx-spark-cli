@@ -110,7 +110,7 @@ def _parse_sadf_json(raw: str) -> list[dict]:
                     continue
 
     except Exception:  # noqa: BLE001  # pragma: no cover — belt-and-suspenders guard
-        pass
+        return series
 
     return series
 
