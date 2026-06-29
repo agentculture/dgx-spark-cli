@@ -321,3 +321,61 @@ class TestReadSwapTrendEdgeCases:
         """Return dict must have exactly the required keys when available."""
         result = read_swap_trend(hours=24, runner=_make_runner(_SADF_JSON_FIXTURE))
         assert set(result.keys()) == {"available", "source", "series"}
+
+
+# ---------------------------------------------------------------------------
+# Regression: current Ubuntu sysstat folds swap+mem %used into the `memory`
+# block (swpused-percent / memused-percent) with NO `swap-pages` block and no
+# `%swpused`/`%memused` keys. Captured live from a DGX Spark box; the original
+# parser skipped every such entry, yielding an empty (None) trend.
+# ---------------------------------------------------------------------------
+
+_SADF_JSON_MEMORY_BLOCK = json.dumps(
+    {
+        "sysstat": {
+            "hosts": [
+                {
+                    "statistics": [
+                        {
+                            "timestamp": {"date": "2026-06-28", "time": "21:10:03"},
+                            "memory": {
+                                "memused-percent": 85.56,
+                                "swpused": 16673420,
+                                "swpfree": 103792,
+                                "swpused-percent": 99.38,
+                            },
+                        },
+                        {
+                            "timestamp": {"date": "2026-06-28", "time": "21:20:03"},
+                            "memory": {
+                                "memused-percent": 86.10,
+                                "swpused-percent": 100.0,
+                            },
+                        },
+                    ]
+                }
+            ]
+        }
+    }
+)
+
+
+class TestReadSwapTrendMemoryBlockSchema:
+    """Swap/mem %used carried inside the memory block (modern sysstat)."""
+
+    def test_available_true(self):
+        result = read_swap_trend(runner=_make_runner(_SADF_JSON_MEMORY_BLOCK))
+        assert result["available"] is True
+
+    def test_both_entries_parsed(self):
+        result = read_swap_trend(runner=_make_runner(_SADF_JSON_MEMORY_BLOCK))
+        assert len(result["series"]) == 2
+
+    def test_swap_used_pct_from_swpused_percent(self):
+        result = read_swap_trend(runner=_make_runner(_SADF_JSON_MEMORY_BLOCK))
+        assert result["series"][0]["swap_used_pct"] == 99.38
+        assert result["series"][1]["swap_used_pct"] == 100.0
+
+    def test_mem_used_pct_from_memused_percent(self):
+        result = read_swap_trend(runner=_make_runner(_SADF_JSON_MEMORY_BLOCK))
+        assert result["series"][0]["mem_used_pct"] == 85.56

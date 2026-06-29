@@ -54,14 +54,25 @@ def _build_ts(timestamp: object) -> str:
     return str(date or time or timestamp)
 
 
+def _pick(*values):
+    """Return the first value that is not None (schema-tolerant lookup)."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 def _parse_sadf_json(raw: str) -> list[dict]:
     """Parse ``sadf -j`` stdout into a normalized swap/mem series.
 
     Navigates defensively with ``.get()`` everywhere — the sysstat JSON
     schema varies across distro versions so we never assume a key is present.
-    Entries that are missing required fields (``%swpused`` or ``%memused``)
-    are silently skipped; we never raise KeyError/TypeError/ValueError on
-    unexpected shapes.
+    Swap/mem ``%used`` live under different keys per version: older sadf
+    exposes ``swap-pages/%swpused`` and ``memory/%memused``, while current
+    Ubuntu sysstat folds both into the ``memory`` block as
+    ``swpused-percent`` / ``memused-percent``. We try each layout in turn.
+    Entries from which neither swap nor mem %used can be read are silently
+    skipped; we never raise KeyError/TypeError/ValueError on unexpected shapes.
     """
     try:
         data = json.loads(raw)
@@ -86,14 +97,20 @@ def _parse_sadf_json(raw: str) -> list[dict]:
                 ts_block = entry.get("timestamp", {})
                 ts = _build_ts(ts_block)
 
-                swap_pages = entry.get("swap-pages")
                 memory = entry.get("memory")
+                swap_pages = entry.get("swap-pages")
+                mem_block = memory if isinstance(memory, dict) else {}
+                swap_block = swap_pages if isinstance(swap_pages, dict) else {}
 
-                if not isinstance(swap_pages, dict) or not isinstance(memory, dict):
-                    continue
-
-                swap_pct = swap_pages.get("%swpused")
-                mem_pct = memory.get("%memused")
+                swap_pct = _pick(
+                    swap_block.get("%swpused"),
+                    mem_block.get("swpused-percent"),
+                    mem_block.get("%swpused"),
+                )
+                mem_pct = _pick(
+                    mem_block.get("%memused"),
+                    mem_block.get("memused-percent"),
+                )
 
                 if swap_pct is None or mem_pct is None:
                     continue
