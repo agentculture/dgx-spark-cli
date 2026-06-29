@@ -69,6 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     from spark.cli._commands import machine as _machine_cmds
     from spark.cli._commands import monitor as _monitor_group
     from spark.cli._commands import overview as _overview_cmd
+    from spark.cli._commands import swap as _swap_group
     from spark.cli._commands import whoami as _whoami_cmd
 
     parser = _CliArgumentParser(
@@ -95,6 +96,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _machine_cmds.register(sub)
     # Threshold watchdog that webhooks on catastrophes (background service).
     _monitor_group.register(sub)
+    # Swap inspection, per-process history, and the guarded swap grow.
+    _swap_group.register(sub)
     # Register your own noun groups here:
     #   from spark.cli._commands import my_noun as _my_noun_group
     #   _my_noun_group.register(sub)
