@@ -402,6 +402,8 @@ class TestGracefulDegradation:
         monkeypatch.setattr(swap_cmd, "query", lambda *a, **k: [])
 
         for argv in (
+            ["swap", "overview"],
+            ["swap", "overview", "--json"],
             ["swap", "status"],
             ["swap", "status", "--json"],
             ["swap", "history"],

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-06-30
+
+### Changed
+
+- swap overview is now the comprehensive read: it folds in the live snapshot (memory, swap, devices, sar trend) that swap status shows, so it is a superset of status; status is unchanged (quick snapshot-only view)
+- swap grow positional now uses SIZE as a metavar with clearer help; invalid-size errors explain that SIZE is a placeholder and show a copy-pasteable 'spark swap grow 64G' example
+- argparse parse-error hints now point at the runnable 'spark' command instead of the non-runnable display name 'dgx-spark-cli' (e.g. run 'spark --help')
+
 ## [0.7.0] - 2026-06-29
 
 ### Added

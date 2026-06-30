@@ -67,11 +67,11 @@ Swap inspection is read-only; the `grow` command is a dry-run by default — re-
 
 | Verb | What it does |
 |------|--------------|
-| `spark swap status` | Read-only swap + memory pressure with a recent sar trend. No root needed. |
-| `spark swap grow <size> [--apply] [--ephemeral]` | Grow swap. DEFAULT is a DRY RUN: prints a warning and the exact command plan but changes nothing. Re-run with `--apply` to actually perform it (needs root — without root it prints the plan and a `sudo ... --apply` hint). `--ephemeral` activates the new size for this boot only (no `/etc/fstab` change); the default is permanent (survives reboot). `<size>` accepts forms like `32G`, `32GiB`, or a raw byte count. |
+| `spark swap overview` | Comprehensive read of the swap noun: the descriptive summary **plus** the live snapshot (memory, swap, devices, sar trend). The superset of `status`. |
+| `spark swap status` | The quick snapshot only: read-only swap + memory pressure with a recent sar trend. No root needed. (Also shown, with the verb list, by `spark swap overview`.) |
+| `spark swap grow SIZE [--apply] [--ephemeral]` | Grow swap. DEFAULT is a DRY RUN: prints a warning and the exact command plan but changes nothing. Re-run with `--apply` to actually perform it (needs root — without root it prints the plan and a `sudo ... --apply` hint). `--ephemeral` activates the new size for this boot only (no `/etc/fstab` change); the default is permanent (survives reboot). `SIZE` is a placeholder — replace it with a value like `64G`, `32GiB`, or a raw byte count (e.g. `spark swap grow 64G`; don't type the literal word `size`). |
 | `spark swap history [--window DUR] [--top N]` | Top per-process memory/swap consumers over a time window (e.g. `--window 1h --top 10`). |
 | `spark swap sample` | Record one per-process telemetry snapshot (this is what a scheduled timer calls). |
-| `spark swap overview` | Descriptive summary of the swap noun. |
 
 #### Per-process history collection via systemd timer
 

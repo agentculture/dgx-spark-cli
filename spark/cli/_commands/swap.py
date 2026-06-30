@@ -7,11 +7,12 @@ structured result to stdout and any diagnostics/warnings to stderr (the strict
 
 Verbs:
 
-* ``status``   — read-only swap/memory snapshot + a short sar trend summary
+* ``overview`` — describe the swap surface **and** show the live snapshot
+  (the superset of ``status``; descriptive, tolerates a stray arg)
+* ``status``   — the quick snapshot only: swap/memory + a short sar trend summary
 * ``grow``     — the guarded mutator (dry-run by default; ``--apply`` runs it)
 * ``history``  — top per-process swap/RSS consumers over a recent window
 * ``sample``   — take one snapshot for the history store (timer-driven)
-* ``overview`` — describe the swap surface (descriptive; tolerates a stray arg)
 
 ``grow`` is the only mutator and it is dry-run by default: without ``--apply``
 it previews the exact step plan and changes nothing. ``--apply`` requires root
@@ -65,7 +66,13 @@ def _parse_size(text: str) -> int:
         raise CliError(
             EXIT_USER_ERROR,
             f"invalid size: {text!r}",
-            remediation="pass a size like 32G, 32GiB, 16g, or a raw byte count.",
+            # The common trip-up is typing the literal placeholder word "size"
+            # (e.g. `swap grow size 64G`). Spell out that SIZE is a placeholder
+            # and show a copy-pasteable command so the fix is obvious.
+            remediation=(
+                "SIZE is a placeholder — replace it with an actual size like "
+                "64G, 32GiB, 16g, or a raw byte count (e.g. 'spark swap grow 64G')."
+            ),
         )
     value = int(float(match.group(1)) * _SIZE_UNITS[match.group(2).upper()])
     if value <= 0:
@@ -130,32 +137,49 @@ _OVERVIEW_SECTIONS = [
             "Swap inspection, per-process history, and the guarded swap grow.",
             "Read verbs are descriptive (exit 0 even when a subsystem is absent); "
             "grow is the only mutator and is dry-run unless --apply is passed.",
+            "overview is the comprehensive read: this surface plus the live "
+            "snapshot below (the same snapshot `status` shows on its own).",
         ],
     },
     {
         "title": "Verbs",
         "items": [
-            "status — swap/memory snapshot + a short sar trend summary",
-            "grow <size> [--apply] [--ephemeral] — resize the swapfile (dry-run default)",
+            "overview — this description plus the live snapshot below (the superset)",
+            "status — the quick snapshot only: swap/memory + a short sar trend summary",
+            "grow SIZE [--apply] [--ephemeral] — resize the swapfile "
+            "(dry-run default; SIZE e.g. 64G)",
             "history [--window DUR] [--top N] — top per-process swap/RSS consumers",
             "sample — take one snapshot for the history store (timer-driven)",
-            "overview — this description",
         ],
     },
 ]
 
 
-def _overview_payload() -> dict:
-    return {"subject": "dgx-spark-cli swap", "sections": _OVERVIEW_SECTIONS}
-
-
 def cmd_overview(args: argparse.Namespace) -> int:
     # `target` is accepted and ignored: descriptive verbs must never hard-fail
     # on a stray positional (the overview contract). Always exits 0.
+    #
+    # overview subsumes `status`: it shows the descriptive surface AND the live
+    # snapshot. collect_swap_state / read_swap_trend are documented never to
+    # raise (they degrade to available:false), so folding them in here keeps the
+    # never-hard-fail contract intact.
+    state = collect_swap_state()
+    trend = read_swap_trend()
+    summary = _trend_summary(trend)
     if _json(args):
-        emit_result(_overview_payload(), json_mode=True)
+        emit_result(
+            {
+                "subject": "dgx-spark-cli swap",
+                "sections": _OVERVIEW_SECTIONS,
+                "state": state,
+                "trend": trend,
+                "trend_summary": summary,
+            },
+            json_mode=True,
+        )
     else:
-        emit_result(render_sections("dgx-spark-cli swap", _OVERVIEW_SECTIONS), json_mode=False)
+        sections = list(_OVERVIEW_SECTIONS) + _status_sections(state, trend, summary)
+        emit_result(render_sections("dgx-spark-cli swap", sections), json_mode=False)
     return 0
 
 
@@ -423,9 +447,17 @@ def register(sub: argparse._SubParsersAction) -> None:
     _add_json(sample)
     sample.set_defaults(func=cmd_sample)
 
-    grow = noun.add_parser("grow", help="Resize the swapfile (dry-run unless --apply).")
+    grow = noun.add_parser(
+        "grow",
+        help="Resize the swapfile to SIZE (dry-run unless --apply); e.g. 'grow 64G'.",
+    )
     _add_json(grow)
-    grow.add_argument("size", help="Target swap size (e.g. 32G, 32GiB, or a raw byte count).")
+    grow.add_argument(
+        "size",
+        metavar="SIZE",
+        help="Target swap size — e.g. 64G, 32GiB, 16g, or a raw byte count. "
+        "Replace SIZE with the value; don't type the literal word 'size'.",
+    )
     grow.add_argument(
         "--apply",
         action="store_true",
