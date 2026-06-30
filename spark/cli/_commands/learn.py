@@ -55,6 +55,15 @@ Monitoring (AI-free background watchdog)
 Webhooks on catastrophes (memory/disk/thermal/GPU/containers); no AI.
 On 'run' it also POSTs a one-shot "started watching" alert (notify_on_start).
 
+Swap management
+---------------
+  dgx-spark-cli swap status        Swap/memory snapshot + short sar trend.
+  dgx-spark-cli swap grow <size>   Resize the swapfile (dry-run unless --apply).
+  dgx-spark-cli swap history       Top per-process swap/RSS consumers.
+  dgx-spark-cli swap sample        Take one snapshot for the history store.
+  dgx-spark-cli swap overview      Describe the swap surface.
+grow is dry-run by default; --apply requires root. Sizes are 32G/32GiB/bytes.
+
 Machine-readable output
 -----------------------
 Every command supports --json. Errors in JSON mode emit
@@ -97,6 +106,10 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["monitor", "once"], "summary": "One monitor cycle + webhook delivery."},
             {"path": ["monitor", "run"], "summary": "Foreground watchdog loop."},
             {"path": ["monitor", "config"], "summary": "Show/scaffold monitor config."},
+            {"path": ["swap", "status"], "summary": "Swap/memory snapshot + sar trend."},
+            {"path": ["swap", "grow"], "summary": "Resize the swapfile (dry-run default)."},
+            {"path": ["swap", "history"], "summary": "Top per-process swap/RSS consumers."},
+            {"path": ["swap", "sample"], "summary": "Snapshot for the history store."},
         ],
         "exit_codes": {
             "0": "success",

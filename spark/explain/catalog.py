@@ -346,6 +346,105 @@ All `systemctl`/`loginctl` calls degrade gracefully when systemd is absent.
 """
 
 
+_SWAP = """\
+# dgx-spark-cli swap
+
+Swap inspection, per-process history, and the guarded swap grow. Read verbs are
+descriptive (exit 0 even when a subsystem is absent); `grow` is the only mutator
+and is **dry-run unless `--apply` is passed**.
+
+## Verbs
+
+- `dgx-spark-cli swap status` — swap/memory snapshot + a short sar trend summary.
+- `dgx-spark-cli swap grow <size> [--apply] [--ephemeral]` — resize the swapfile.
+- `dgx-spark-cli swap history [--window DUR] [--top N]` — top per-process swap/RSS.
+- `dgx-spark-cli swap sample` — take one snapshot for the history store.
+- `dgx-spark-cli swap overview` — describe the swap surface.
+
+All verbs support `--json`. Sizes are binary (1024-based): `32G` == `32GiB` ==
+`32GB`; a bare number is bytes.
+"""
+
+_SWAP_STATUS = """\
+# dgx-spark-cli swap status
+
+Read-only swap + memory snapshot, composed from `/proc` (devices, used%, unified
+memory, swappiness) plus a short trend summary read from the existing
+sysstat/`sar` history (recent and average swap-used %). Works without root and
+exits 0 even when a subsystem is unavailable (it reports `available: false`).
+
+## Usage
+
+    dgx-spark-cli swap status
+    dgx-spark-cli swap status --json
+"""
+
+_SWAP_GROW = """\
+# dgx-spark-cli swap grow <size>
+
+The guarded mutator: resize the file-backed swapfile in place
+(`swapoff -> fallocate -> chmod -> mkswap -> swapon`, plus an fstab ensure on the
+persistent path). `<size>` is human-readable (`32G`, `32GiB`, `16g`, or a raw
+byte count; binary 1024-based).
+
+**Dry-run by default**: without `--apply` it previews the exact step plan on
+stderr, emits the structured plan on stdout, and changes nothing (exit 0).
+`--apply` executes it and **requires root** — the executor raises an error
+(exit 2) with a `sudo … --apply` hint otherwise. `--ephemeral` skips the
+persistent fstab entry (this boot only). Hazard warnings (e.g. the swapoff
+ENOMEM risk) are always surfaced on stderr.
+
+## Usage
+
+    dgx-spark-cli swap grow 32G                 # dry-run preview
+    dgx-spark-cli swap grow 32G --json
+    sudo dgx-spark-cli swap grow 32G --apply
+"""
+
+_SWAP_HISTORY = """\
+# dgx-spark-cli swap history
+
+Top per-process swap/RSS consumers over a recent window, aggregated from the
+bounded history store the `sample` verb feeds. `--window` accepts a duration
+(`1h`, `30m`, `2d`, or a raw second count; default `1h`); `--top N` caps the
+ranking (default 10). An empty store prints "no history recorded yet" (and `[]`
+under `--json`) and exits 0.
+
+## Usage
+
+    dgx-spark-cli swap history
+    dgx-spark-cli swap history --window 6h --top 20
+    dgx-spark-cli swap history --json
+"""
+
+_SWAP_SAMPLE = """\
+# dgx-spark-cli swap sample
+
+Take one snapshot of per-process memory/swap from `/proc` and append it to the
+bounded history store (which `swap history` later queries). Reports how many
+process samples were written. This is the verb an operator's systemd timer / cron
+invokes periodically to build up history.
+
+## Usage
+
+    dgx-spark-cli swap sample
+    dgx-spark-cli swap sample --json
+"""
+
+_SWAP_OVERVIEW = """\
+# dgx-spark-cli swap overview
+
+Descriptive snapshot of the swap noun: its verbs and one-liners. Accepts and
+ignores a stray `target` positional and always exits 0 (the descriptive-verb
+contract).
+
+## Usage
+
+    dgx-spark-cli swap overview
+    dgx-spark-cli swap overview --json
+"""
+
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("spark",): _ROOT,
@@ -377,4 +476,10 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("monitor", "disable"): _MONITOR_SYSTEMD,
     ("monitor", "status"): _MONITOR_SYSTEMD,
     ("monitor", "uninstall"): _MONITOR_SYSTEMD,
+    ("swap",): _SWAP,
+    ("swap", "overview"): _SWAP_OVERVIEW,
+    ("swap", "status"): _SWAP_STATUS,
+    ("swap", "grow"): _SWAP_GROW,
+    ("swap", "history"): _SWAP_HISTORY,
+    ("swap", "sample"): _SWAP_SAMPLE,
 }

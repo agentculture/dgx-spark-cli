@@ -82,7 +82,14 @@ def run_capture(
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return proc.returncode, proc.stdout
+    # Surface stderr when the tool wrote nothing to stdout — e.g. a failing
+    # swapoff/mkswap prints its reason to stderr, and callers that convey the
+    # outcome through the returned text would otherwise lose it. Tools that
+    # report via stdout (e.g. `systemctl is-active` -> "inactive") are unaffected.
+    output = proc.stdout
+    if not output and proc.stderr:
+        output = proc.stderr
+    return proc.returncode, output
 
 
 def read_text(path: str | Path) -> Optional[str]:

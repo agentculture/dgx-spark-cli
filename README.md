@@ -61,6 +61,43 @@ Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment
 error, `3+` reserved.
 
+### Swap management
+
+Swap inspection is read-only; the `grow` command is a dry-run by default — re-run with `--apply` to mutate. All commands support `--json`.
+
+| Verb | What it does |
+|------|--------------|
+| `spark swap status` | Read-only swap + memory pressure with a recent sar trend. No root needed. |
+| `spark swap grow <size> [--apply] [--ephemeral]` | Grow swap. DEFAULT is a DRY RUN: prints a warning and the exact command plan but changes nothing. Re-run with `--apply` to actually perform it (needs root — without root it prints the plan and a `sudo ... --apply` hint). `--ephemeral` activates the new size for this boot only (no `/etc/fstab` change); the default is permanent (survives reboot). `<size>` accepts forms like `32G`, `32GiB`, or a raw byte count. |
+| `spark swap history [--window DUR] [--top N]` | Top per-process memory/swap consumers over a time window (e.g. `--window 1h --top 10`). |
+| `spark swap sample` | Record one per-process telemetry snapshot (this is what a scheduled timer calls). |
+| `spark swap overview` | Descriptive summary of the swap noun. |
+
+#### Per-process history collection via systemd timer
+
+Per-process memory and swap history accrues only when `spark swap sample` runs on a schedule. Here's a systemd service and timer pair:
+
+```ini
+# /etc/systemd/system/spark-swap-sample.service
+[Unit]
+Description=Sample per-process swap/memory for dgx-spark-cli
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env spark swap sample
+
+# /etc/systemd/system/spark-swap-sample.timer
+[Unit]
+Description=Periodic spark swap sample
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+Enable with `sudo systemctl enable --now spark-swap-sample.timer`. Note that system-level CPU/mem/swap trend already comes from sysstat/sar; this timer only adds the per-process layer.
+
 ### Monitoring (`monitor`) — AI-free webhook watchdog
 
 `monitor` turns the collectors into a deterministic, always-on watchdog. It
