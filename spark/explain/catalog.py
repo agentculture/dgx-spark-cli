@@ -355,11 +355,14 @@ and is **dry-run unless `--apply` is passed**.
 
 ## Verbs
 
-- `dgx-spark-cli swap status` — swap/memory snapshot + a short sar trend summary.
-- `dgx-spark-cli swap grow <size> [--apply] [--ephemeral]` — resize the swapfile.
+- `dgx-spark-cli swap overview` — describe the swap surface **and** show the
+  live snapshot (the superset of `status`).
+- `dgx-spark-cli swap status` — the quick snapshot only: swap/memory + a short
+  sar trend summary.
+- `dgx-spark-cli swap grow SIZE [--apply] [--ephemeral]` — resize the swapfile
+  (`SIZE` is a placeholder, e.g. `64G`).
 - `dgx-spark-cli swap history [--window DUR] [--top N]` — top per-process swap/RSS.
 - `dgx-spark-cli swap sample` — take one snapshot for the history store.
-- `dgx-spark-cli swap overview` — describe the swap surface.
 
 All verbs support `--json`. Sizes are binary (1024-based): `32G` == `32GiB` ==
 `32GB`; a bare number is bytes.
@@ -373,6 +376,9 @@ memory, swappiness) plus a short trend summary read from the existing
 sysstat/`sar` history (recent and average swap-used %). Works without root and
 exits 0 even when a subsystem is unavailable (it reports `available: false`).
 
+`status` is the quick snapshot-only view. For the same snapshot *plus* the verb
+surface in one read, use `dgx-spark-cli swap overview` (the superset).
+
 ## Usage
 
     dgx-spark-cli swap status
@@ -380,12 +386,13 @@ exits 0 even when a subsystem is unavailable (it reports `available: false`).
 """
 
 _SWAP_GROW = """\
-# dgx-spark-cli swap grow <size>
+# dgx-spark-cli swap grow SIZE
 
 The guarded mutator: resize the file-backed swapfile in place
 (`swapoff -> fallocate -> chmod -> mkswap -> swapon`, plus an fstab ensure on the
-persistent path). `<size>` is human-readable (`32G`, `32GiB`, `16g`, or a raw
-byte count; binary 1024-based).
+persistent path). `SIZE` is a **placeholder** — replace it with a human-readable
+size (`64G`, `32GiB`, `16g`, or a raw byte count; binary 1024-based). Don't type
+the literal word `size`: `swap grow 64G`, not `swap grow size 64G`.
 
 **Dry-run by default**: without `--apply` it previews the exact step plan on
 stderr, emits the structured plan on stdout, and changes nothing (exit 0).
@@ -434,9 +441,14 @@ invokes periodically to build up history.
 _SWAP_OVERVIEW = """\
 # dgx-spark-cli swap overview
 
-Descriptive snapshot of the swap noun: its verbs and one-liners. Accepts and
-ignores a stray `target` positional and always exits 0 (the descriptive-verb
-contract).
+The comprehensive read of the swap noun: the descriptive surface (its verbs and
+one-liners) **plus** the live snapshot `dgx-spark-cli swap status` shows on its
+own — unified memory, swap devices, swappiness, and the short sar trend. `status`
+remains the quick snapshot-only view (same input); `overview` is the superset.
+
+Accepts and ignores a stray `target` positional and always exits 0 (the
+descriptive-verb contract): the underlying collectors degrade to
+`available: false` rather than raise, so overview never hard-fails.
 
 ## Usage
 

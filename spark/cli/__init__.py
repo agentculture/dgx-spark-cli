@@ -47,10 +47,17 @@ class _CliArgumentParser(argparse.ArgumentParser):
     _json_hint: bool = False
 
     def error(self, message: str) -> None:  # type: ignore[override]
+        # ``self.prog`` is the DISPLAY name ("dgx-spark-cli ...") but the
+        # installed console script is ``spark`` (see ``[project.scripts]``).
+        # A hint of ``run 'dgx-spark-cli --help'`` is a dead end — that command
+        # doesn't exist — so point at the runnable form the user can actually
+        # paste. (The swap domain hints already use ``spark`` for the same
+        # reason; this keeps the parse-error path consistent.)
+        runnable = self.prog.replace("dgx-spark-cli", "spark", 1)
         err = CliError(
             code=EXIT_USER_ERROR,
             message=message,
-            remediation=f"run '{self.prog} --help' to see valid arguments",
+            remediation=f"run '{runnable} --help' to see valid arguments",
         )
         emit_error(err, json_mode=type(self)._json_hint)
         raise SystemExit(err.code)

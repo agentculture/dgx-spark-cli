@@ -86,25 +86,58 @@ def _trend(series: list | None = None, available: bool = True) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# overview
+# overview — now the superset of status (description + live snapshot)
 # ---------------------------------------------------------------------------
 
 
-def test_swap_no_verb_prints_overview(capsys: pytest.CaptureFixture[str]) -> None:
+def _patch_collectors(monkeypatch: pytest.MonkeyPatch, *, state=None, trend=None) -> None:
+    """Pin the snapshot collectors so overview/status tests stay hermetic."""
+    monkeypatch.setattr(swap_cmd, "collect_swap_state", lambda: state or _growable_state())
+    monkeypatch.setattr(swap_cmd, "read_swap_trend", lambda: trend or _trend([]))
+
+
+def test_swap_no_verb_prints_overview(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _patch_collectors(monkeypatch)
     rc = main(["swap"])
     assert rc == 0
     assert "swap" in capsys.readouterr().out.lower()
 
 
-def test_swap_overview_json(capsys: pytest.CaptureFixture[str]) -> None:
+def test_swap_overview_json_includes_snapshot(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _patch_collectors(
+        monkeypatch,
+        trend=_trend([{"ts": "t0", "swap_used_pct": 2.0, "mem_used_pct": 21.0}]),
+    )
     rc = main(["swap", "overview", "--json"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["subject"] == "dgx-spark-cli swap"
     assert payload["sections"]
+    # overview is the superset of status: the structured snapshot is folded in.
+    assert payload["state"]["available"] is True
+    assert payload["trend_summary"]["recent_swap_used_pct"] == 2.0
 
 
-def test_swap_overview_tolerates_stray_positional(capsys: pytest.CaptureFixture[str]) -> None:
+def test_swap_overview_text_shows_snapshot(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _patch_collectors(monkeypatch)
+    rc = main(["swap", "overview"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "# dgx-spark-cli swap" in out
+    assert "## Verbs" in out  # the descriptive surface
+    assert "/swap.img" in out  # the live snapshot, folded in
+
+
+def test_swap_overview_tolerates_stray_positional(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _patch_collectors(monkeypatch)
     rc = main(["swap", "overview", "some/bogus/path"])
     assert rc == 0
     assert capsys.readouterr().out  # still describes the noun, exits 0
@@ -297,6 +330,36 @@ def test_swap_grow_invalid_size_errors(capsys: pytest.CaptureFixture[str]) -> No
     err = capsys.readouterr().err
     assert err.startswith("error:")
     assert "hint:" in err
+    assert "Traceback" not in err
+
+
+def test_swap_grow_literal_size_placeholder_hint(capsys: pytest.CaptureFixture[str]) -> None:
+    # Regression for the `swap grow size` confusion: a user who types the literal
+    # placeholder word gets a hint that says SIZE is a placeholder and shows a
+    # copy-pasteable command.
+    rc = main(["swap", "grow", "size"])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "placeholder" in err
+    assert "spark swap grow 64G" in err
+    assert "Traceback" not in err
+
+
+def test_swap_grow_stray_positional_hint_is_runnable(capsys: pytest.CaptureFixture[str]) -> None:
+    # `swap grow size 64GB`: SIZE is consumed as "size", "64GB" is the stray arg.
+    # argparse routes "unrecognized arguments" through the root parser (raising
+    # SystemExit), so the hint must point at a runnable command (`spark`), not
+    # the non-runnable display name `dgx-spark-cli`.
+    with pytest.raises(SystemExit) as exc:
+        main(["swap", "grow", "size", "64GB"])
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+    assert "run 'spark" in err  # a command that actually exists
+    assert "--help" in err
+    assert "dgx-spark-cli" not in err
     assert "Traceback" not in err
 
 
