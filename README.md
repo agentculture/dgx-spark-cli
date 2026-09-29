@@ -43,6 +43,7 @@ The Spark *is* the system, so these read-only verbs sit at the top level:
 | `status` | Machine-wide scope, anomalies first — the headline. |
 | `memory` | Unified RAM + swap (the GB10 shares one pool across CPU and GPU). |
 | `gpu` | Blackwell GB10: utilization, temp, power, clocks, and GPU processes. |
+| `power` | GB10 power draw, SM clocks (current and max) and P-state via nvidia-smi. |
 | `disk` | Filesystem usage for real block devices (via `/proc/mounts` + `statvfs`). |
 | `thermal` | SoC thermal zones and hwmon sensors (no `lm-sensors` needed). |
 | `containers` | Running Docker containers and their health. |

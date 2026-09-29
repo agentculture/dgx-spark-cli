@@ -385,3 +385,27 @@ def test_power_unavailable_when_nothing_readable(out: str) -> None:
 
     rep = power.collect(runner=lambda _n, _a: out)
     assert rep["available"] is False and rep["remediation"]
+
+
+def test_power_all_error_tokens_is_unavailable() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: ", ".join(["[Unknown Error]"] * 5) + "\n")
+    assert rep["available"] is False and rep["remediation"]
+
+
+def test_power_not_supported_limit_gets_one_accurate_warning() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "12.5, [Not Supported], 2411, 3003, P0\n")
+    assert rep["available"] is True
+    assert rep["data"]["power_limit_w"] is None
+    assert rep["warnings"] == ["power.limit unreadable ([Not Supported])"]
+
+
+def test_power_bracketed_pstate_is_missing() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "12.5, [N/A], 2411, 3003, [GPU requires reset]\n")
+    assert rep["data"]["pstate"] is None
+    assert any("pstate unreadable ([GPU requires reset])" in w for w in rep["warnings"])

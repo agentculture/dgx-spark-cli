@@ -17,9 +17,15 @@ from spark.probe._run import Runner, default_runner
 _FIELDS = ["power.draw", "power.limit", "clocks.sm", "clocks.max.sm", "pstate"]
 
 
+def _is_token(value: str) -> bool:
+    """True for nvidia-smi placeholder/error tokens: ``N/A`` or any ``[...]``."""
+    upper = value.upper()
+    return upper == "N/A" or (value.startswith("[") and value.endswith("]"))
+
+
 def _clean(value: str) -> Optional[str]:
     cleaned = value.strip()
-    if not cleaned or cleaned.upper().startswith("[N/A") or cleaned.upper() == "N/A":
+    if not cleaned or _is_token(cleaned):
         return None
     return cleaned
 
@@ -43,6 +49,20 @@ def _fmt(value: object, unit: str = "") -> str:
     return f"{value}{unit}" if value is not None else "n/a"
 
 
+def _field_warnings(fields: list[str], raw: dict) -> list[str]:
+    warnings: list[str] = []
+    for i, key in enumerate(_FIELDS):
+        text = fields[i].strip()
+        if raw[key] is not None:
+            if key != "pstate" and _num(raw[key]) is None:
+                warnings.append(f"{key} reported a non-finite value; treated as missing")
+        elif key == "power.limit" and text.upper().startswith("[N/A"):
+            warnings.append("power.limit is not reported by nvidia-smi on this GPU (N/A)")
+        else:
+            warnings.append(f"{key} unreadable ({text or 'empty'})")
+    return warnings
+
+
 def collect(runner: Optional[Runner] = None) -> dict:
     """Return a power report using ``runner`` (injectable; defaults to nvidia-smi)."""
     run = runner or default_runner
@@ -58,7 +78,6 @@ def collect(runner: Optional[Runner] = None) -> dict:
     fields += [""] * (len(_FIELDS) - len(fields))
     raw = {key: _clean(fields[i]) for i, key in enumerate(_FIELDS)}
 
-    non_finite = [key for key in _FIELDS[:4] if raw[key] is not None and _num(raw[key]) is None]
     if raw["pstate"] is None and all(_num(raw[k]) is None for k in _FIELDS[:4]):
         return unavailable("power", "nvidia-smi", "nvidia-smi returned no readable power fields")
 
@@ -69,12 +88,7 @@ def collect(runner: Optional[Runner] = None) -> dict:
         "clocks_max_sm_mhz": _mhz(raw["clocks.max.sm"]),
         "pstate": raw["pstate"],
     }
-    warnings = []
-    if data["power_limit_w"] is None:
-        warnings.append("power.limit is not reported by nvidia-smi on this GPU (N/A)")
-
-    for key in non_finite:
-        warnings.append(f"{key} reported a non-finite value; treated as missing")
+    warnings = _field_warnings(fields, raw)
 
     sections = [
         {
