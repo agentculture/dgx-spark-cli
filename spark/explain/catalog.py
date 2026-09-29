@@ -290,6 +290,12 @@ as a systemd `--user` service this CLI installs and manages.
 Watches: memory %, swap %, disk %, hottest sensor, GPU temp, load-per-core,
 container health, and subsystem availability (nvidia-smi / docker going dark).
 
+`subsystem_down` fires (critical) only on a genuine probe failure: the tool is
+installed and usable, yet the probe fails (e.g. the docker daemon is down or
+nvidia-smi errors). A subsystem that is merely **not installed** (no docker) or
+**not permitted** (this user is not in the docker group) is reported as
+`available: false` by `check`, but raises no alert.
+
 ## Verbs
 
 - `monitor check` — evaluate now, print firing alerts (no webhook, no state).

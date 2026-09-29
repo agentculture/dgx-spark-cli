@@ -173,19 +173,26 @@ def _containers(snap: dict, th: dict, out: list) -> None:
             out.append(Alert(f"container:{name}", "critical", f"container '{name}' is unhealthy"))
 
 
+_NOT_DOWN_REASONS = frozenset({"not_installed", "not_permitted"})
+
+
 def _availability(snap: dict, th: dict, out: list) -> None:
     if not th.get("subsystem_down"):
         return
     available = snap.get("available") or {}
-    # Only the tool-backed subsystems that should be present on the Spark — alert
-    # if nvidia-smi or docker (and thus the probe) goes dark.
+    reasons = snap.get("unavailable_reason") or {}
+    # Only the tool-backed subsystems — alert if nvidia-smi or docker (and thus
+    # the probe) goes dark. A subsystem that is merely not installed, or that
+    # this user may not use (e.g. not in the docker group), is not "down": it
+    # would otherwise be a permanent critical alert. A missing reason is
+    # treated as a genuine probe failure.
     for sub in ("gpu", "containers"):
-        if available.get(sub) is False:
+        if available.get(sub) is False and reasons.get(sub) not in _NOT_DOWN_REASONS:
             out.append(
                 Alert(
                     f"subsystem_down:{sub}",
                     "critical",
-                    f"subsystem '{sub}' is unavailable (probe tool missing or failing)",
+                    f"subsystem '{sub}' is down (its probe tool is installed but failing)",
                 )
             )
 

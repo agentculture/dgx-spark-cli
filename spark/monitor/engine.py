@@ -54,6 +54,13 @@ def snapshot(runner: Optional[Callable] = None) -> dict:
             "containers": cnt.get("available", False),
             "contention": cont.get("available", False),
         },
+        # Why a tool-backed subsystem is unavailable (only for those that are);
+        # the subsystem_down rule ignores not_installed / not_permitted.
+        "unavailable_reason": {
+            name: rep.get("reason")
+            for name, rep in (("gpu", g), ("containers", cnt))
+            if not rep.get("available", False) and rep.get("reason")
+        },
         "memory": mem.get("data", {}),
         "disk": dsk.get("data", {}),
         "thermal": therm.get("data", {}),

@@ -9,9 +9,16 @@ inventing a VRAM number. Reads are graceful: no ``nvidia-smi`` -> unavailable.
 
 from __future__ import annotations
 
+import shutil
 from typing import Optional
 
-from spark.probe._report import human_bytes, report, unavailable
+from spark.probe._report import (
+    REASON_FAILED,
+    REASON_NOT_INSTALLED,
+    human_bytes,
+    report,
+    unavailable,
+)
 from spark.probe._run import Runner, default_runner
 
 _HOT_C = 80.0
@@ -99,7 +106,13 @@ def collect(runner: Optional[Runner] = None) -> dict:
         ["--query-gpu=" + ",".join(_QUERY_FIELDS), "--format=csv,noheader,nounits"],
     )
     if out is None:
-        return unavailable("gpu", "nvidia-smi", "install NVIDIA drivers / run on the DGX Spark")
+        reason = REASON_NOT_INSTALLED if shutil.which("nvidia-smi") is None else REASON_FAILED
+        return unavailable(
+            "gpu",
+            "nvidia-smi",
+            "install NVIDIA drivers / run on the DGX Spark",
+            reason=reason,
+        )
 
     line = next((row for row in out.splitlines() if row.strip()), "")
     fields = [f.strip() for f in line.split(",")]

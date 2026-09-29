@@ -252,6 +252,18 @@ def test_gpu_unavailable_without_nvidia_smi() -> None:
     assert rep["remediation"]
 
 
+def test_gpu_unavailable_reason_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gpu.shutil, "which", lambda _n: None)
+    rep = gpu.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "not_installed"
+
+
+def test_gpu_unavailable_reason_failed_when_tool_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gpu.shutil, "which", lambda n: f"/usr/bin/{n}")
+    rep = gpu.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "failed"
+
+
 # --- network --------------------------------------------------------------
 
 _ADDR = """\
@@ -313,6 +325,34 @@ def test_containers_flags_unhealthy_and_gpu() -> None:
 def test_containers_unavailable_without_docker() -> None:
     rep = containers.collect(runner=lambda _n, _a: None)
     assert rep["available"] is False
+
+
+def test_containers_unavailable_reason_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(containers.shutil, "which", lambda _n: None)
+    rep = containers.collect(runner=lambda _n, _a: None)
+    assert rep["available"] is False
+    assert rep["reason"] == "not_installed"
+
+
+def test_containers_unavailable_reason_not_permitted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # docker is installed and its socket exists, but this user may not use it
+    # (not in the docker group).
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.setattr(containers.shutil, "which", lambda n: f"/usr/bin/{n}")
+    monkeypatch.setattr(containers.os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(containers.os, "access", lambda _p, _m: False)
+    rep = containers.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "not_permitted"
+
+
+def test_containers_unavailable_reason_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Installed and permitted, yet `docker ps` fails: a genuine probe failure.
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.setattr(containers.shutil, "which", lambda n: f"/usr/bin/{n}")
+    monkeypatch.setattr(containers.os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(containers.os, "access", lambda _p, _m: True)
+    rep = containers.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "failed"
 
 
 # --- status (aggregator) --------------------------------------------------

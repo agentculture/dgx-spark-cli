@@ -10,6 +10,8 @@ import json
 import stat
 import urllib.error
 
+import pytest
+
 from spark.monitor import config as mconfig
 from spark.monitor import engine, notify, state, systemd
 from spark.monitor.config import Config
@@ -174,6 +176,38 @@ def test_evaluate_subsystem_down() -> None:
     snap = {"available": {"gpu": False, "containers": True}}
     keys = {a.key for a in evaluate(snap, {"subsystem_down": True})}
     assert "subsystem_down:gpu" in keys
+
+
+@pytest.mark.parametrize("reason", ["not_installed", "not_permitted"])
+def test_evaluate_absent_or_forbidden_subsystem_is_not_down(reason: str) -> None:
+    # docker absent / user lacks docker-group access: not a catastrophe, so no
+    # (permanent) critical subsystem_down alert.
+    snap = {
+        "available": {"gpu": True, "containers": False},
+        "unavailable_reason": {"containers": reason},
+    }
+    alerts = evaluate(snap, {"subsystem_down": True})
+    assert not [a for a in alerts if a.key.startswith("subsystem_down")]
+
+
+def test_evaluate_failed_probe_is_down() -> None:
+    snap = {
+        "available": {"gpu": True, "containers": False},
+        "unavailable_reason": {"containers": "failed"},
+    }
+    alerts = evaluate(snap, {"subsystem_down": True})
+    assert [(a.key, a.severity) for a in alerts] == [("subsystem_down:containers", "critical")]
+
+
+def test_snapshot_carries_unavailable_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    from spark.probe import containers as containers_probe
+
+    monkeypatch.setattr(containers_probe.shutil, "which", lambda _n: None)
+    snap = engine.snapshot(runner=lambda _n, _a: None)
+    assert snap["available"]["containers"] is False
+    assert snap["unavailable_reason"]["containers"] == "not_installed"
+    keys = {a.key for a in evaluate(snap, {"subsystem_down": True})}
+    assert "subsystem_down:containers" not in keys
 
 
 # --- state (edge-triggering) ----------------------------------------------
