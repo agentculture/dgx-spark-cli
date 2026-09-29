@@ -242,3 +242,71 @@ def test_target_equal_to_current_is_user_error() -> None:
     with pytest.raises(CliError) as excinfo:
         build_grow_plan(8 * GiB, state=_state())
     assert excinfo.value.code == 1
+
+
+# --- fstab ensure: whitespace-insensitive idempotence (runs the real sh step
+# against a temp fstab; never touches /etc/fstab) ---------------------------
+
+
+def _run_fstab_step(monkeypatch: pytest.MonkeyPatch, fstab: Path, swapfile: str) -> None:
+    import subprocess  # nosec B404 - test runs the planner's own argv on a temp file
+
+    monkeypatch.setattr(grow, "_FSTAB_PATH", str(fstab))
+    plan = build_grow_plan(32 * GiB, state=_state(), swapfile=swapfile)
+    argv = plan.steps[-1]["argv"]
+    assert argv[0] == "sh"
+    subprocess.run(argv, check=True)  # nosec B603 - fixed argv from the planner
+
+
+def _swap_lines(fstab: Path, swapfile: str) -> list[str]:
+    return [ln for ln in fstab.read_text().splitlines() if ln.split()[:1] == [swapfile]]
+
+
+@pytest.mark.parametrize(
+    "existing",
+    [
+        "/swap.img\tnone\tswap\tsw\t0\t0",
+        "/swap.img   none  swap  sw  0 0",
+        "/swap.img none swap defaults 0 0",
+        "  /swap.img none swap sw",
+    ],
+)
+def test_fstab_ensure_matches_existing_entry_whitespace_insensitively(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, existing: str
+) -> None:
+    fstab = tmp_path / "fstab"
+    fstab.write_text(f"UUID=abc / ext4 defaults 0 1\n{existing}\n")
+    before = fstab.read_text()
+    _run_fstab_step(monkeypatch, fstab, "/swap.img")
+    assert fstab.read_text() == before  # no duplicate appended
+
+
+def test_fstab_ensure_appends_once_when_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fstab = tmp_path / "fstab"
+    fstab.write_text(
+        "UUID=abc / ext4 defaults 0 1\n"
+        "#/swap.img none swap sw 0 0\n"  # commented out: does not count
+        "/swap.img2 none swap sw 0 0\n"  # a different file
+        "/swap.img /mnt/x ext4 defaults 0 0\n"  # not a swap entry
+    )
+    _run_fstab_step(monkeypatch, fstab, "/swap.img")
+    _run_fstab_step(monkeypatch, fstab, "/swap.img")  # idempotent re-run
+    lines = _swap_lines(fstab, "/swap.img")
+    assert lines.count("/swap.img none swap sw 0 0") == 1
+
+
+def test_fstab_ensure_path_is_not_shell_interpreted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fstab = tmp_path / "fstab"
+    fstab.write_text("UUID=abc / ext4 defaults 0 1\n")
+    marker = tmp_path / "pwned"
+    # No whitespace (an fstab device field cannot hold a raw space), but quotes,
+    # a command substitution and a backslash that awk -v would mangle.
+    evil = f"/sw'$(:>{marker})'\\a.img"
+    _run_fstab_step(monkeypatch, fstab, evil)
+    _run_fstab_step(monkeypatch, fstab, evil)
+    assert not marker.exists()
+    assert fstab.read_text().count(f"{evil} none swap sw 0 0") == 1
