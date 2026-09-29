@@ -144,6 +144,31 @@ def test_disk_filters_virtual_and_warns_when_full(tmp_path) -> None:
     assert rep["warnings"]  # 90% >= 85% full
 
 
+def test_disk_decodes_mountpoints_without_mangling_utf8(tmp_path) -> None:
+    mounts = tmp_path / "mounts"
+    mounts.write_bytes(
+        "/dev/sda1 /media/u/Données ext4 rw 0 0\n".encode("utf-8")  # raw UTF-8
+        + b"/dev/sdb1 /media/u/My\\040Disk ext4 rw 0 0\n"  # kernel-escaped space
+        + b"/dev/sdc1 /media/u/Donn\\303\\251es2 ext4 rw 0 0\n"  # escaped UTF-8 bytes
+        + b"/dev/sdd1 /media/u/back\\134slash ext4 rw 0 0\n"  # escaped backslash
+    )
+    seen: list[str] = []
+
+    def _recording_statvfs(path: str):
+        seen.append(path)
+        return _fake_statvfs(path)
+
+    rep = disk.collect(str(mounts), statvfs=_recording_statvfs)
+    expected = [
+        "/media/u/Données",
+        "/media/u/My Disk",
+        "/media/u/Données2",
+        "/media/u/back\\slash",
+    ]
+    assert seen == expected
+    assert [fs["mount"] for fs in rep["data"]["filesystems"]] == expected
+
+
 def test_disk_unavailable_when_missing() -> None:
     rep = disk.collect("/no/such/mounts")
     assert rep["available"] is False
