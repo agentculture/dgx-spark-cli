@@ -1,8 +1,10 @@
 """``spark network`` — interfaces, default route, and reachable addresses.
 
 Summarizes ``ip -br addr`` and ``ip route show default`` rather than dumping
-every veth: named interfaces (wifi/ethernet/tailscale/bridges) are listed with
-their IPv4, while the many container ``veth`` pairs are rolled up to a count.
+every veth: named interfaces (wifi/ethernet/tailscale/bridges/usb-gadget) are
+listed with their IPv4, while the many container ``veth`` pairs are rolled up to
+a count. USB-gadget links (``l4tbr0``, ``usb*``, ``rndis*``) are listed but never
+counted as reachable.
 Graceful: no ``ip`` -> unavailable.
 """
 
@@ -26,6 +28,11 @@ def _classify(name: str) -> str:
         return "veth"
     if name.startswith(("br-", "docker")):
         return "bridge"
+    if name == "l4tbr0" or name.startswith(("usb", "rndis")):
+        # USB device-mode (gadget) links, e.g. Jetson's l4tbr0 bridge at
+        # 192.168.55.1 and its usb*/rndis* members: they only reach a host on
+        # the other end of the USB cable, never the network.
+        return "usb-gadget"
     if name.startswith("wl"):
         return "wifi"
     if name.startswith(("en", "eth")):

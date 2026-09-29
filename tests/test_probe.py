@@ -322,6 +322,30 @@ def test_network_summarizes_and_excludes_bridge_addrs() -> None:
     assert data["default_routes"][0]["dev"] == "wlP9s9"
 
 
+def test_network_usb_gadget_links_are_not_reachable() -> None:
+    # Jetson's USB device-mode bridge (l4tbr0 at 192.168.55.1) and its usb*/rndis*
+    # members only reach a host plugged into the USB port, not the network.
+    addr = (
+        "lo               UNKNOWN        127.0.0.1/8 ::1/128\n"
+        "eth0             UP             10.0.0.5/24\n"
+        "l4tbr0           UP             192.168.55.1/24\n"
+        "usb0             UP             192.168.55.2/24\n"
+        "rndis0           UP             192.168.56.1/24\n"
+    )
+
+    def _runner(name: str, args) -> str | None:
+        if args and args[0] == "-br":
+            return addr
+        return "default via 10.0.0.1 dev eth0 proto dhcp src 10.0.0.5\n"
+
+    rep = network.collect(runner=_runner)
+    data = rep["data"]
+    assert data["reachable_ipv4"] == ["10.0.0.5"]
+    kinds = {i["name"]: i["kind"] for i in data["interfaces"]}
+    assert kinds["l4tbr0"] == kinds["usb0"] == kinds["rndis0"] == "usb-gadget"
+    assert data["bridge_count"] == 0  # l4tbr0 is not a docker bridge
+
+
 def test_network_unavailable_without_ip() -> None:
     rep = network.collect(runner=lambda _n, _a: None)
     assert rep["available"] is False

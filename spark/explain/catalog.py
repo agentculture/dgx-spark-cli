@@ -255,7 +255,9 @@ _NETWORK = """\
 Interfaces, default route, and reachable addresses, summarized from `ip -br
 addr` and `ip route show default`. Named interfaces (wifi/ethernet/tailscale/
 bridges) are listed with their IPv4; the many container `veth` pairs are rolled
-up to a count. "Reachable" excludes docker bridge gateways and link-local.
+up to a count. "Reachable" excludes docker bridge gateways, link-local, and
+USB-gadget links (`l4tbr0`, `usb*`, `rndis*`, kind `usb-gadget`), which only
+reach a host on the other end of a USB cable.
 
 ## Usage
 
