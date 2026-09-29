@@ -421,3 +421,37 @@ def test_parse_size_rejects_garbage(bad: str) -> None:
 )
 def test_parse_duration(text: str, expected: int) -> None:
     assert swap_cmd._parse_duration(text) == expected
+
+
+def _swapfile_state() -> dict:
+    """A host whose swapfile is /swapfile (not the /swap.img default)."""
+    state = _growable_state()
+    state["devices"][0]["name"] = "/swapfile"
+    state["backing"]["swapfile"] = "/swapfile"
+    return state
+
+
+def test_swap_grow_targets_detected_swapfile(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    monkeypatch.setattr(swap_cmd, "collect_swap_state", _swapfile_state)
+    rc = main(["swap", "grow", "32G", "--json"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["swapfile"] == "/swapfile"
+    argvs = [s["argv"] for s in payload["steps"] if s["argv"]]
+    assert ["swapoff", "/swapfile"] in argvs
+    assert all("/swap.img" not in " ".join(a) for a in argvs)
+    assert "swapoff /swapfile" in captured.err
+
+
+def test_swap_grow_reads_current_size_of_detected_swapfile(
+    capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The detected /swapfile is 8 GiB; growing to 4G must be refused as a shrink
+    # (with the wrong /swap.img target the current size was read as 0).
+    monkeypatch.setattr(swap_cmd, "collect_swap_state", _swapfile_state)
+    rc = main(["swap", "grow", "4G"])
+    assert rc == 1
+    assert "not larger than the current swap" in capsys.readouterr().err

@@ -367,7 +367,13 @@ def cmd_grow(args: argparse.Namespace) -> int:
     state = collect_swap_state()
     # build_grow_plan raises CliError (exit 1/2) on an unsafe request; let it
     # propagate so _dispatch renders the error: / hint: shape.
-    plan = build_grow_plan(size_bytes, state=state, ephemeral=bool(args.ephemeral))
+    # Grow the swapfile actually detected on this host (e.g. /swapfile), not the
+    # planner's /swap.img default. With none detected, the planner refuses.
+    grow_kwargs = {}
+    detected = (state.get("backing") or {}).get("swapfile")
+    if detected:
+        grow_kwargs["swapfile"] = detected
+    plan = build_grow_plan(size_bytes, state=state, ephemeral=bool(args.ephemeral), **grow_kwargs)
     json_mode = _json(args)
 
     # Always surface the plan's hazard warnings (e.g. swapoff ENOMEM) on stderr,

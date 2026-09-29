@@ -411,9 +411,11 @@ surface in one read, use `dgx-spark-cli swap overview` (the superset).
 _SWAP_GROW = """\
 # dgx-spark-cli swap grow SIZE
 
-The guarded mutator: resize the file-backed swapfile in place
+The guarded mutator: resize the file-backed swapfile detected in `/proc/swaps`
+(e.g. `/swap.img` or `/swapfile`) in place
 (`swapoff -> fallocate -> chmod -> mkswap -> swapon`, plus an fstab ensure on the
-persistent path). `SIZE` is a **placeholder** — replace it with a human-readable
+persistent path). A host with no file-backed swap is refused (exit 1).
+`SIZE` is a **placeholder** — replace it with a human-readable
 size (`64G`, `32GiB`, `16g`, or a raw byte count; binary 1024-based). Don't type
 the literal word `size`: `swap grow 64G`, not `swap grow size 64G`.
 
