@@ -59,6 +59,32 @@ def test_config_init_writes_file(tmp_path, capsys) -> None:
     assert json.loads(Path(written).read_text())["webhook_url"]
 
 
+def test_config_init_refuses_to_overwrite_existing(capsys) -> None:
+    assert main(["monitor", "config", "--init", "--json"]) == 0
+    written = Path(json.loads(capsys.readouterr().out)["path"])
+    written.write_text('{"webhook_url": "https://hooks.example/secret-token"}\n')
+
+    rc = main(["monitor", "config", "--init"])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "already exists" in err
+    assert "hint:" in err and "--force" in err
+    # The operator's config is untouched.
+    assert "secret-token" in written.read_text()
+
+
+def test_config_init_force_overwrites(capsys) -> None:
+    assert main(["monitor", "config", "--init", "--json"]) == 0
+    written = Path(json.loads(capsys.readouterr().out)["path"])
+    written.write_text('{"webhook_url": "https://hooks.example/secret-token"}\n')
+
+    rc = main(["monitor", "config", "--init", "--force", "--json"])
+    assert rc == 0
+    assert "secret-token" not in written.read_text()
+    assert json.loads(written.read_text())["thresholds"]
+
+
 def test_once_no_webhook_exits_zero(capsys) -> None:
     rc = main(["monitor", "once", "--json"])
     assert rc == 0

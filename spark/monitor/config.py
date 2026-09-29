@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from spark.cli._errors import EXIT_USER_ERROR, CliError
+
 _APP = "dgx-spark"
 
 WEBHOOK_FORMATS = ("generic", "slack", "discord")
@@ -144,9 +146,22 @@ def validate(cfg: Config) -> list[str]:
     return errors
 
 
-def init_file(path: Optional[str] = None) -> Path:
-    """Write a scaffold config (with a placeholder webhook) and return its path."""
+def init_file(path: Optional[str] = None, *, force: bool = False) -> Path:
+    """Write a scaffold config (with a placeholder webhook) and return its path.
+
+    Refuses (``CliError``, exit 1) when the file already exists — it may hold
+    the operator's real webhook — unless ``force`` is true.
+    """
     cfg_path = Path(path) if path else default_config_path()
+    if cfg_path.exists() and not force:
+        raise CliError(
+            EXIT_USER_ERROR,
+            f"monitor config already exists: {cfg_path}",
+            remediation=(
+                "edit it in place, or re-run 'dgx-spark-cli monitor config --init --force' "
+                "to overwrite it with a fresh scaffold (this discards its webhook_url)"
+            ),
+        )
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     scaffold = Config(webhook_url="https://example.com/your-webhook").to_dict()
     cfg_path.write_text(json.dumps(scaffold, indent=2) + "\n", encoding="utf-8")
