@@ -162,7 +162,28 @@ def init_file(path: Optional[str] = None, *, force: bool = False) -> Path:
                 "to overwrite it with a fresh scaffold (this discards its webhook_url)"
             ),
         )
-    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    # The config holds a webhook (often a bearer-token URL): a directory we
+    # create is 0700 and the file is written 0600. An existing parent (e.g. a
+    # shared dir given via --config) keeps its mode.
+    cfg_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     scaffold = Config(webhook_url="https://example.com/your-webhook").to_dict()
-    cfg_path.write_text(json.dumps(scaffold, indent=2) + "\n", encoding="utf-8")
+    _write_private(cfg_path, json.dumps(scaffold, indent=2) + "\n")
     return cfg_path
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Atomically write ``text`` to ``path`` with mode 0600.
+
+    The temp file is created 0600 from the start (``O_EXCL``, so there is no
+    world-readable window) in the target directory, then renamed over ``path``.
+    """
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(tmp, 0o600)  # an umask can only narrow it; pin it exactly
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise

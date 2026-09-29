@@ -349,7 +349,9 @@ _MONITOR_CONFIG = """\
 
 Show the resolved configuration (thresholds, webhook, interval) and whether it
 is valid. `--init` writes a scaffold config file you can edit; it refuses
-(exit 1) when the file already exists, unless `--force` is also given. `--json`,
+(exit 1) when the file already exists, unless `--force` is also given. The
+file is written mode 0600 (and a directory it creates 0700), since the webhook
+URL is often a bearer secret. `--json`,
 `--config PATH`. The webhook may also come from `DGX_SPARK_WEBHOOK_URL`.
 `notify_on_start` (default `true`) toggles the startup liveness alert.
 """
