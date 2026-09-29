@@ -381,6 +381,7 @@ def cmd_grow(args: argparse.Namespace) -> int:
             plan,
             apply=True,
             runner=lambda name, a: run_capture(name, a, timeout=_APPLY_STEP_TIMEOUT),
+            diagnostic=emit_diagnostic,
         )
     else:
         # Dry-run (default): preview the exact step plan on stderr, structured

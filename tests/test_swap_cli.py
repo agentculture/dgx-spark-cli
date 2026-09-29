@@ -258,7 +258,7 @@ def _spy_apply(monkeypatch: pytest.MonkeyPatch) -> dict:
     """Replace apply_grow_plan with a spy that records the apply= flag."""
     calls: dict = {}
 
-    def _fake(plan, *, apply=False, runner=None, geteuid=None):
+    def _fake(plan, *, apply=False, runner=None, geteuid=None, diagnostic=None):
         calls["apply"] = apply
         calls["runner"] = runner
         return {
