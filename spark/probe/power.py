@@ -8,6 +8,7 @@ guessed. Reads are graceful: no ``nvidia-smi`` -> unavailable.
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from spark.probe._report import report, unavailable
@@ -27,9 +28,10 @@ def _num(value: Optional[str]) -> Optional[float]:
     if value is None:
         return None
     try:
-        return float(value)
+        num = float(value)
     except ValueError:
         return None
+    return num if math.isfinite(num) else None
 
 
 def _mhz(value: Optional[str]) -> Optional[int]:
@@ -56,6 +58,10 @@ def collect(runner: Optional[Runner] = None) -> dict:
     fields += [""] * (len(_FIELDS) - len(fields))
     raw = {key: _clean(fields[i]) for i, key in enumerate(_FIELDS)}
 
+    non_finite = [key for key in _FIELDS[:4] if raw[key] is not None and _num(raw[key]) is None]
+    if raw["pstate"] is None and all(_num(raw[k]) is None for k in _FIELDS[:4]):
+        return unavailable("power", "nvidia-smi", "nvidia-smi returned no readable power fields")
+
     data = {
         "power_draw_w": _num(raw["power.draw"]),
         "power_limit_w": _num(raw["power.limit"]),
@@ -66,6 +72,9 @@ def collect(runner: Optional[Runner] = None) -> dict:
     warnings = []
     if data["power_limit_w"] is None:
         warnings.append("power.limit is not reported by nvidia-smi on this GPU (N/A)")
+
+    for key in non_finite:
+        warnings.append(f"{key} reported a non-finite value; treated as missing")
 
     sections = [
         {

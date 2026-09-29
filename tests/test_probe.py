@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from spark.probe import (
     _run,
     containers,
@@ -363,4 +365,23 @@ def test_power_unavailable_without_nvidia_smi() -> None:
     from spark.probe import power
 
     rep = power.collect(runner=lambda _n, _a: None)
+    assert rep["available"] is False and rep["remediation"]
+
+
+def test_power_non_finite_values_are_missing_not_raised() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "nan, inf, nan, inf, P0\n")
+    assert rep["available"] is True
+    d = rep["data"]
+    assert d["power_draw_w"] is None and d["power_limit_w"] is None
+    assert d["clocks_sm_mhz"] is None and d["clocks_max_sm_mhz"] is None
+    assert any("non-finite" in w for w in rep["warnings"])
+
+
+@pytest.mark.parametrize("out", ["", "\n", "[N/A], [N/A], [N/A], [N/A], [N/A]\n"])
+def test_power_unavailable_when_nothing_readable(out: str) -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: out)
     assert rep["available"] is False and rep["remediation"]
