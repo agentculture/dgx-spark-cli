@@ -37,6 +37,7 @@ Machine scope (DGX Spark host telemetry)
   dgx-spark-cli status             Machine-wide scope, anomalies first.
   dgx-spark-cli memory             Unified RAM + swap (CPU and GPU share it).
   dgx-spark-cli gpu                Blackwell GB10: util, temp, power, processes.
+  dgx-spark-cli power              GB10 power draw, SM clocks, P-state.
   dgx-spark-cli disk               Filesystem usage for real block devices.
   dgx-spark-cli thermal            SoC thermal zones and hwmon sensors.
   dgx-spark-cli containers         Running Docker containers and health.
@@ -97,6 +98,7 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["status"], "summary": "Machine-wide scope, anomalies first."},
             {"path": ["memory"], "summary": "Unified RAM + swap snapshot."},
             {"path": ["gpu"], "summary": "Blackwell GB10 GPU snapshot."},
+            {"path": ["power"], "summary": "GB10 power draw, clocks and P-state."},
             {"path": ["disk"], "summary": "Filesystem usage."},
             {"path": ["thermal"], "summary": "Thermal zones and hwmon sensors."},
             {"path": ["containers"], "summary": "Running Docker containers and health."},

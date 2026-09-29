@@ -326,3 +326,41 @@ def test_status_has_host_and_subsystems() -> None:
     assert "Subsystems" in titles
     assert isinstance(rep["warnings"], list)
     assert "host" in rep["data"]
+
+
+# --- power ----------------------------------------------------------------
+
+
+def _power_runner(name: str, args) -> str:
+    assert name == "nvidia-smi"
+    return "12.15, [N/A], 2411, 3003, P0\n"
+
+
+def test_power_reports_measured_fields_and_unavailable_limit() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=_power_runner)
+    assert rep["subject"] == "power" and rep["available"] is True
+    d = rep["data"]
+    assert d["power_draw_w"] == 12.15
+    assert d["power_limit_w"] is None
+    assert d["clocks_sm_mhz"] == 2411
+    assert d["clocks_max_sm_mhz"] == 3003
+    assert d["pstate"] == "P0"
+    assert "nvpmodel" not in d and "rails" not in d
+    assert any("power.limit" in w for w in rep["warnings"])
+
+
+def test_power_reports_limit_when_present() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "10, 140.00, 1, 2, P8\n")
+    assert rep["data"]["power_limit_w"] == 140.0
+    assert not rep["warnings"]
+
+
+def test_power_unavailable_without_nvidia_smi() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: None)
+    assert rep["available"] is False and rep["remediation"]

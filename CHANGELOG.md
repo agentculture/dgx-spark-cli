@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-29
+
+### Added
+
+- spark power verb: GB10 power draw, SM clocks (current and max) and P-state via nvidia-smi; power.limit reported as unavailable (null plus a warning) when nvidia-smi says N/A, never guessed; no nvpmodel/rails keys since the GB10 has neither
+
 ## [0.7.1] - 2026-06-30
 
 ### Changed

@@ -35,6 +35,7 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `dgx-spark-cli status` — machine-wide scope, anomalies first (the headline).
 - `dgx-spark-cli memory` — unified RAM + swap (CPU and GPU share one pool).
 - `dgx-spark-cli gpu` — Blackwell GB10: utilization, temp, power, GPU processes.
+- `dgx-spark-cli power` — GB10 power draw, SM clocks, P-state (nvidia-smi).
 - `dgx-spark-cli disk` — filesystem usage for real block devices.
 - `dgx-spark-cli thermal` — SoC thermal zones and hwmon sensors.
 - `dgx-spark-cli containers` — running Docker containers and health.
@@ -182,6 +183,28 @@ attributed to the GPU. Unavailable (exit 0) when no `nvidia-smi` is present.
 
     dgx-spark-cli gpu
     dgx-spark-cli gpu --json
+"""
+
+_POWER = """\
+# dgx-spark-cli power
+
+GB10 power snapshot via nvidia-smi (`power.draw`, `power.limit`, `clocks.sm`,
+`clocks.max.sm`, `pstate`). The GB10 has no `nvpmodel` and no per-rail sensors,
+so unlike Jetson's `power` verb there are no `nvpmodel` / `rails` keys: only
+what nvidia-smi reports. `power.limit` is `[N/A]` on the GB10; it is reported
+as `null` with a warning, never guessed. Unavailable (exit 0) when no
+`nvidia-smi` is present.
+
+## JSON data keys
+
+- `power_draw_w` (float W), `power_limit_w` (float W or null)
+- `clocks_sm_mhz`, `clocks_max_sm_mhz` (int MHz)
+- `pstate` (e.g. `P0`)
+
+## Usage
+
+    dgx-spark-cli power
+    dgx-spark-cli power --json
 """
 
 _DISK = """\
@@ -471,6 +494,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("status",): _STATUS,
     ("memory",): _MEMORY,
     ("gpu",): _GPU,
+    ("power",): _POWER,
     ("disk",): _DISK,
     ("thermal",): _THERMAL,
     ("containers",): _CONTAINERS,
