@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from spark.probe import (
     _run,
     containers,
@@ -142,6 +144,31 @@ def test_disk_filters_virtual_and_warns_when_full(tmp_path) -> None:
     assert rep["warnings"]  # 90% >= 85% full
 
 
+def test_disk_decodes_mountpoints_without_mangling_utf8(tmp_path) -> None:
+    mounts = tmp_path / "mounts"
+    mounts.write_bytes(
+        "/dev/sda1 /media/u/Données ext4 rw 0 0\n".encode("utf-8")  # raw UTF-8
+        + b"/dev/sdb1 /media/u/My\\040Disk ext4 rw 0 0\n"  # kernel-escaped space
+        + b"/dev/sdc1 /media/u/Donn\\303\\251es2 ext4 rw 0 0\n"  # escaped UTF-8 bytes
+        + b"/dev/sdd1 /media/u/back\\134slash ext4 rw 0 0\n"  # escaped backslash
+    )
+    seen: list[str] = []
+
+    def _recording_statvfs(path: str):
+        seen.append(path)
+        return _fake_statvfs(path)
+
+    rep = disk.collect(str(mounts), statvfs=_recording_statvfs)
+    expected = [
+        "/media/u/Données",
+        "/media/u/My Disk",
+        "/media/u/Données2",
+        "/media/u/back\\slash",
+    ]
+    assert seen == expected
+    assert [fs["mount"] for fs in rep["data"]["filesystems"]] == expected
+
+
 def test_disk_unavailable_when_missing() -> None:
     rep = disk.collect("/no/such/mounts")
     assert rep["available"] is False
@@ -250,6 +277,18 @@ def test_gpu_unavailable_without_nvidia_smi() -> None:
     assert rep["remediation"]
 
 
+def test_gpu_unavailable_reason_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gpu.shutil, "which", lambda _n: None)
+    rep = gpu.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "not_installed"
+
+
+def test_gpu_unavailable_reason_failed_when_tool_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gpu.shutil, "which", lambda n: f"/usr/bin/{n}")
+    rep = gpu.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "failed"
+
+
 # --- network --------------------------------------------------------------
 
 _ADDR = """\
@@ -283,6 +322,30 @@ def test_network_summarizes_and_excludes_bridge_addrs() -> None:
     assert data["default_routes"][0]["dev"] == "wlP9s9"
 
 
+def test_network_usb_gadget_links_are_not_reachable() -> None:
+    # Jetson's USB device-mode bridge (l4tbr0 at 192.168.55.1) and its usb*/rndis*
+    # members only reach a host plugged into the USB port, not the network.
+    addr = (
+        "lo               UNKNOWN        127.0.0.1/8 ::1/128\n"
+        "eth0             UP             10.0.0.5/24\n"
+        "l4tbr0           UP             192.168.55.1/24\n"
+        "usb0             UP             192.168.55.2/24\n"
+        "rndis0           UP             192.168.56.1/24\n"
+    )
+
+    def _runner(name: str, args) -> str | None:
+        if args and args[0] == "-br":
+            return addr
+        return "default via 10.0.0.1 dev eth0 proto dhcp src 10.0.0.5\n"
+
+    rep = network.collect(runner=_runner)
+    data = rep["data"]
+    assert data["reachable_ipv4"] == ["10.0.0.5"]
+    kinds = {i["name"]: i["kind"] for i in data["interfaces"]}
+    assert kinds["l4tbr0"] == kinds["usb0"] == kinds["rndis0"] == "usb-gadget"
+    assert data["bridge_count"] == 0  # l4tbr0 is not a docker bridge
+
+
 def test_network_unavailable_without_ip() -> None:
     rep = network.collect(runner=lambda _n, _a: None)
     assert rep["available"] is False
@@ -313,6 +376,34 @@ def test_containers_unavailable_without_docker() -> None:
     assert rep["available"] is False
 
 
+def test_containers_unavailable_reason_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(containers.shutil, "which", lambda _n: None)
+    rep = containers.collect(runner=lambda _n, _a: None)
+    assert rep["available"] is False
+    assert rep["reason"] == "not_installed"
+
+
+def test_containers_unavailable_reason_not_permitted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # docker is installed and its socket exists, but this user may not use it
+    # (not in the docker group).
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.setattr(containers.shutil, "which", lambda n: f"/usr/bin/{n}")
+    monkeypatch.setattr(containers.os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(containers.os, "access", lambda _p, _m: False)
+    rep = containers.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "not_permitted"
+
+
+def test_containers_unavailable_reason_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Installed and permitted, yet `docker ps` fails: a genuine probe failure.
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    monkeypatch.setattr(containers.shutil, "which", lambda n: f"/usr/bin/{n}")
+    monkeypatch.setattr(containers.os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(containers.os, "access", lambda _p, _m: True)
+    rep = containers.collect(runner=lambda _n, _a: None)
+    assert rep["reason"] == "failed"
+
+
 # --- status (aggregator) --------------------------------------------------
 
 
@@ -326,3 +417,84 @@ def test_status_has_host_and_subsystems() -> None:
     assert "Subsystems" in titles
     assert isinstance(rep["warnings"], list)
     assert "host" in rep["data"]
+
+
+# --- power ----------------------------------------------------------------
+
+
+def _power_runner(name: str, args) -> str:
+    assert name == "nvidia-smi"
+    return "12.15, [N/A], 2411, 3003, P0\n"
+
+
+def test_power_reports_measured_fields_and_unavailable_limit() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=_power_runner)
+    assert rep["subject"] == "power" and rep["available"] is True
+    d = rep["data"]
+    assert d["power_draw_w"] == 12.15
+    assert d["power_limit_w"] is None
+    assert d["clocks_sm_mhz"] == 2411
+    assert d["clocks_max_sm_mhz"] == 3003
+    assert d["pstate"] == "P0"
+    assert "nvpmodel" not in d and "rails" not in d
+    assert any("power.limit" in w for w in rep["warnings"])
+
+
+def test_power_reports_limit_when_present() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "10, 140.00, 1, 2, P8\n")
+    assert rep["data"]["power_limit_w"] == 140.0
+    assert not rep["warnings"]
+
+
+def test_power_unavailable_without_nvidia_smi() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: None)
+    assert rep["available"] is False and rep["remediation"]
+
+
+def test_power_non_finite_values_are_missing_not_raised() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "nan, inf, nan, inf, P0\n")
+    assert rep["available"] is True
+    d = rep["data"]
+    assert d["power_draw_w"] is None and d["power_limit_w"] is None
+    assert d["clocks_sm_mhz"] is None and d["clocks_max_sm_mhz"] is None
+    assert any("non-finite" in w for w in rep["warnings"])
+
+
+@pytest.mark.parametrize("out", ["", "\n", "[N/A], [N/A], [N/A], [N/A], [N/A]\n"])
+def test_power_unavailable_when_nothing_readable(out: str) -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: out)
+    assert rep["available"] is False and rep["remediation"]
+
+
+def test_power_all_error_tokens_is_unavailable() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: ", ".join(["[Unknown Error]"] * 5) + "\n")
+    assert rep["available"] is False and rep["remediation"]
+
+
+def test_power_not_supported_limit_gets_one_accurate_warning() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "12.5, [Not Supported], 2411, 3003, P0\n")
+    assert rep["available"] is True
+    assert rep["data"]["power_limit_w"] is None
+    assert rep["warnings"] == ["power.limit unreadable ([Not Supported])"]
+
+
+def test_power_bracketed_pstate_is_missing() -> None:
+    from spark.probe import power
+
+    rep = power.collect(runner=lambda _n, _a: "12.5, [N/A], 2411, 3003, [GPU requires reset]\n")
+    assert rep["data"]["pstate"] is None
+    assert any("pstate unreadable ([GPU requires reset])" in w for w in rep["warnings"])

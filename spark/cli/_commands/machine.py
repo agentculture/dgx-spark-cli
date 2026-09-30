@@ -6,6 +6,7 @@ alongside ``whoami``/``doctor`` rather than under a noun:
     spark status       machine-wide scope, anomalies first (the headline)
     spark memory       unified RAM + swap
     spark gpu          Blackwell GB10 snapshot
+    spark power        GB10 power draw, clocks, P-state
     spark disk         filesystem usage
     spark thermal      SoC thermal zones + hwmon sensors
     spark containers   running Docker containers + health
@@ -22,13 +23,14 @@ from __future__ import annotations
 import argparse
 
 from spark.cli._commands._probe import register_probe
-from spark.probe import containers, disk, gpu, memory, network, processes, status, thermal
+from spark.probe import containers, disk, gpu, memory, network, power, processes, status, thermal
 
 # (verb, collector, help) — order is the help-listing order.
 _VERBS = [
     ("status", status.collect, "Machine-wide scope, anomalies first (the headline)."),
     ("memory", memory.collect, "Unified RAM + swap (memory shared by CPU and GPU)."),
     ("gpu", gpu.collect, "Blackwell GB10 GPU: utilization, temp, power, GPU processes."),
+    ("power", power.collect, "GB10 power draw, SM clocks and P-state (nvidia-smi)."),
     ("disk", disk.collect, "Filesystem usage for real (non-virtual) block devices."),
     ("thermal", thermal.collect, "SoC thermal zones and hwmon sensors (Celsius)."),
     ("containers", containers.collect, "Running Docker containers and their health."),

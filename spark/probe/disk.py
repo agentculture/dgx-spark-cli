@@ -8,6 +8,7 @@ mounts are filtered out so the report shows real storage only.
 from __future__ import annotations
 
 import os
+import re
 from typing import Callable, Iterator, Optional
 
 from spark.probe import _run
@@ -46,6 +47,22 @@ _SKIP_FSTYPES = {
 
 Statvfs = Callable[[str], os.statvfs_result]
 
+# The kernel escapes space, tab, newline and backslash in /proc/mounts fields as
+# a backslash plus three octal digits (\040, \011, \012, \134). Only 000-377
+# is a byte.
+_OCTAL_ESCAPE = re.compile(rb"\\([0-3][0-7]{2})")
+
+
+def _unescape_mount_field(field: str) -> str:
+    """Decode /proc/mounts octal escapes without mangling (non-ASCII) UTF-8.
+
+    Works on bytes (via the filesystem encoding, surrogateescape) so raw UTF-8
+    such as ``Données`` and escaped bytes such as ``Donn\\303\\251es`` both come
+    back as the real path ``os.statvfs`` needs.
+    """
+    raw = os.fsencode(field)
+    return os.fsdecode(_OCTAL_ESCAPE.sub(lambda m: bytes([int(m.group(1), 8)]), raw))
+
 
 def _parse_mounts(text: str) -> Iterator[tuple[str, str, str]]:
     """Yield ``(device, mountpoint, fstype)`` for real block mounts."""
@@ -63,7 +80,7 @@ def _parse_mounts(text: str) -> Iterator[tuple[str, str, str]]:
             continue
         seen.add(target)
         # /proc/mounts octal-escapes spaces etc. in the mountpoint (\040).
-        target = target.encode("utf-8", "replace").decode("unicode_escape")
+        target = _unescape_mount_field(target)
         yield source, target, fstype
 
 

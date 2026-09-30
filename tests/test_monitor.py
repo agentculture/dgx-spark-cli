@@ -7,7 +7,10 @@ delivery uses an injected opener (no network), and systemd calls are stubbed.
 from __future__ import annotations
 
 import json
+import stat
 import urllib.error
+
+import pytest
 
 from spark.monitor import config as mconfig
 from spark.monitor import engine, notify, state, systemd
@@ -69,6 +72,32 @@ def test_config_init_file_roundtrips(tmp_path) -> None:
     assert path.is_file()
     data = json.loads(path.read_text())
     assert "thresholds" in data and "webhook_url" in data
+
+
+def test_config_init_file_is_private(tmp_path) -> None:
+    # The config holds a webhook bearer URL: dir 0700, file 0600.
+    path = mconfig.init_file(str(tmp_path / "newdir" / "m.json"))
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+
+
+def test_config_init_force_tightens_existing_file_mode(tmp_path) -> None:
+    path = tmp_path / "m.json"
+    path.write_text("{}\n")
+    path.chmod(0o644)
+    mconfig.init_file(str(path), force=True)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert json.loads(path.read_text())["thresholds"]
+    assert [p.name for p in tmp_path.iterdir()] == ["m.json"]  # no temp file left
+
+
+def test_config_init_leaves_existing_parent_dir_mode_alone(tmp_path) -> None:
+    # --config may point into a shared dir; only dirs the CLI creates get 0700.
+    shared = tmp_path / "shared"
+    shared.mkdir(mode=0o755)
+    shared.chmod(0o755)
+    mconfig.init_file(str(shared / "m.json"))
+    assert stat.S_IMODE(shared.stat().st_mode) == 0o755
 
 
 def test_config_corrupt_file_falls_back(tmp_path) -> None:
@@ -147,6 +176,38 @@ def test_evaluate_subsystem_down() -> None:
     snap = {"available": {"gpu": False, "containers": True}}
     keys = {a.key for a in evaluate(snap, {"subsystem_down": True})}
     assert "subsystem_down:gpu" in keys
+
+
+@pytest.mark.parametrize("reason", ["not_installed", "not_permitted"])
+def test_evaluate_absent_or_forbidden_subsystem_is_not_down(reason: str) -> None:
+    # docker absent / user lacks docker-group access: not a catastrophe, so no
+    # (permanent) critical subsystem_down alert.
+    snap = {
+        "available": {"gpu": True, "containers": False},
+        "unavailable_reason": {"containers": reason},
+    }
+    alerts = evaluate(snap, {"subsystem_down": True})
+    assert not [a for a in alerts if a.key.startswith("subsystem_down")]
+
+
+def test_evaluate_failed_probe_is_down() -> None:
+    snap = {
+        "available": {"gpu": True, "containers": False},
+        "unavailable_reason": {"containers": "failed"},
+    }
+    alerts = evaluate(snap, {"subsystem_down": True})
+    assert [(a.key, a.severity) for a in alerts] == [("subsystem_down:containers", "critical")]
+
+
+def test_snapshot_carries_unavailable_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    from spark.probe import containers as containers_probe
+
+    monkeypatch.setattr(containers_probe.shutil, "which", lambda _n: None)
+    snap = engine.snapshot(runner=lambda _n, _a: None)
+    assert snap["available"]["containers"] is False
+    assert snap["unavailable_reason"]["containers"] == "not_installed"
+    keys = {a.key for a in evaluate(snap, {"subsystem_down": True})}
+    assert "subsystem_down:containers" not in keys
 
 
 # --- state (edge-triggering) ----------------------------------------------

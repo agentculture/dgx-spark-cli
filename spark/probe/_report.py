@@ -45,10 +45,28 @@ def report(
     }
 
 
-def unavailable(subject: str, source: str, remediation: str) -> dict[str, object]:
-    """A report for a subsystem whose backing tool/node is absent."""
+# Why a tool-backed subsystem is unavailable (the report's optional "reason"):
+#   not_installed — the backing tool is not on PATH
+#   not_permitted — the tool is installed but this user may not use it
+#   failed        — installed and permitted, yet the probe failed (e.g. daemon down)
+REASON_NOT_INSTALLED = "not_installed"
+REASON_NOT_PERMITTED = "not_permitted"
+REASON_FAILED = "failed"
+
+
+def unavailable(
+    subject: str, source: str, remediation: str, *, reason: Optional[str] = None
+) -> dict[str, object]:
+    """A report for a subsystem whose backing tool/node is absent.
+
+    ``reason`` (one of the ``REASON_*`` values) is recorded when the collector
+    can tell *why*; the monitor uses it to separate "not installed / not
+    permitted" (not a catastrophe) from a genuine probe failure.
+    """
     rep = report(subject, available=False, source=source)
     rep["remediation"] = remediation
+    if reason is not None:
+        rep["reason"] = reason
     return rep
 
 

@@ -17,6 +17,7 @@ VERBS = [
     "status",
     "memory",
     "gpu",
+    "power",
     "disk",
     "thermal",
     "containers",

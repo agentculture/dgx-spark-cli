@@ -67,7 +67,7 @@ def _overview_sections() -> list:
                 "once — one cycle: evaluate + deliver + update state",
                 "run — foreground loop (the systemd ExecStart)",
                 "test — POST a synthetic alert to verify the webhook",
-                "config [--init] — show/scaffold thresholds + webhook",
+                "config [--init [--force]] — show/scaffold thresholds + webhook",
                 "install/enable/disable/status/uninstall — systemd --user service",
             ],
         },
@@ -279,7 +279,9 @@ def _config_sections(cfg: mconfig.Config, errors: list) -> list:
 def cmd_config(args: argparse.Namespace) -> int:
     json_mode = _json(args)
     if getattr(args, "init", False):
-        path = mconfig.init_file(getattr(args, "config", None))
+        path = mconfig.init_file(
+            getattr(args, "config", None), force=bool(getattr(args, "force", False))
+        )
         if json_mode:
             emit_result(
                 {"subject": _SUBJECT_CONFIG, "action": "init", "path": str(path)}, json_mode=True
@@ -446,6 +448,11 @@ def register(sub: argparse._SubParsersAction) -> None:
     _add_json(cfg)
     _add_config(cfg)
     cfg.add_argument("--init", action="store_true", help="Write a scaffold config file.")
+    cfg.add_argument(
+        "--force",
+        action="store_true",
+        help="With --init, overwrite an existing config file.",
+    )
     cfg.set_defaults(func=cmd_config)
 
     inst = noun.add_parser("install", help="Write the systemd --user unit.")

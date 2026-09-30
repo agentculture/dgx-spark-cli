@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-29
+
+### Added
+
+- spark power verb: GB10 power draw, SM clocks (current and max) and P-state via nvidia-smi; power.limit reported as unavailable (null plus a warning) when nvidia-smi says N/A, never guessed; no nvpmodel/rails keys since the GB10 has neither
+
+### Fixed
+
+- swap grow --apply: a step failing after a successful swapoff (fallocate/chmod/mkswap error, missing tool or timeout) now triggers a best-effort swapon of the original file, logged as a diagnostic and reported in the error; if recovery fails the hint says to run sudo swapon on the file (previously swap was left off and the advised re-run was refused)
+- swap grow targets the swapfile detected in /proc/swaps (e.g. /swapfile) instead of always /swap.img, so current size, free-space check and the step plan are right; no detected swapfile is still refused
+- swap grow fstab ensure recognises an existing entry whitespace-insensitively (awk on device and type=swap), so a tab-separated entry no longer gets a duplicate appended; the path is passed as a positional parameter, never spliced into the script
+- monitor config --init refuses (exit 1, with a hint) to overwrite an existing monitor.json unless the new --force flag is given
+- monitor config --init writes monitor.json with mode 0600 (atomic temp + rename) and creates its directory 0700, since the webhook URL is often a bearer secret
+- monitor subsystem_down no longer fires for a subsystem that is not installed (no docker) or not permitted (user not in the docker group); the gpu/containers probes record an unavailable reason and only a genuine probe failure alerts
+- disk no longer drops mounts with non-ASCII names (e.g. /media/u/Données): /proc/mounts octal escapes are decoded at the byte level instead of with unicode_escape
+- network classifies USB-gadget links (l4tbr0, usb*, rndis*) as usb-gadget and no longer lists their addresses as reachable IPv4
+
 ## [0.7.1] - 2026-06-30
 
 ### Changed

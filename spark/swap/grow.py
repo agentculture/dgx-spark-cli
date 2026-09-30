@@ -31,7 +31,6 @@ available RAM the plan recommends adding a second swapfile (which avoids
 
 from __future__ import annotations
 
-import shlex
 from dataclasses import dataclass, field
 
 from spark.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
@@ -192,19 +191,25 @@ def _fstab_step(state: dict, swapfile: str) -> dict:
             "desc": f"fstab entry for {swapfile} already present; no change needed",
             "argv": [],
         }
-    # Cannot tell from state -> emit an idempotent ensure step. The appended
-    # line is prefixed with a newline so a target /etc/fstab that lacks a final
-    # newline can't concatenate our entry onto its last line (which would also
-    # defeat the grep guard and append again on the next run). A leading blank
-    # line on an already-newline-terminated fstab is harmless (parsers skip it).
-    quoted = shlex.quote(_fstab_line(swapfile))
+    # Cannot tell from state -> emit an idempotent ensure step. The "already
+    # present?" check is whitespace-insensitive: awk splits on any run of
+    # spaces/tabs and matches field 1 (the device) == swapfile and field 3 (the
+    # fs type) == swap, so a tab-separated or differently-optioned entry is
+    # recognised instead of getting a duplicate appended. The swapfile, the
+    # line and the fstab path reach the script only as positional parameters
+    # ($1..$3), never spliced into the script text, so nothing in the path is
+    # shell- or awk-interpreted (awk reads it from ARGV, not via -v, which
+    # would process backslash escapes). The appended line is prefixed with a
+    # newline so an fstab lacking a final newline can't have our entry
+    # concatenated onto its last line; a blank line is harmless to parsers.
+    script = (
+        'awk \'BEGIN { f = ARGV[1]; ARGV[1] = "" } '
+        '$1 == f && $3 == "swap" { found = 1 } END { exit !found }\' "$1" "$3" '
+        '|| printf \'\\n%s\\n\' "$2" >> "$3"'
+    )
     return {
         "desc": f"Ensure persistent fstab entry for {swapfile}",
-        "argv": [
-            "sh",
-            "-c",
-            f"grep -qxF {quoted} {_FSTAB_PATH} || printf '\\n%s\\n' {quoted} >> {_FSTAB_PATH}",
-        ],
+        "argv": ["sh", "-c", script, "sh", swapfile, _fstab_line(swapfile), _FSTAB_PATH],
     }
 
 

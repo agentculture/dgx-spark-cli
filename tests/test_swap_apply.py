@@ -263,8 +263,77 @@ def test_abort_when_a_later_step_fails() -> None:
         apply_grow_plan(plan, apply=True, runner=runner, geteuid=_root)
 
     assert excinfo.value.code == 2
-    assert runner.names == ["swapoff", "fallocate", "chmod", "mkswap"]
-    assert "swapon" not in runner.names
+    # The plan's own swapon step never ran; the only swapon is the recovery
+    # (see test_failure_after_swapoff_attempts_swapon_recovery).
+    assert runner.names == ["swapoff", "fallocate", "chmod", "mkswap", "swapon"]
+
+
+class _FailRunner(FakeRunner):
+    """FakeRunner that fails a *set* of tools (e.g. mkswap and the recovery swapon)."""
+
+    def __init__(self, fail: set[str]) -> None:
+        super().__init__()
+        self._fail = fail
+
+    def __call__(self, name, args):
+        self.calls.append((name, list(args)))
+        if name in self._fail:
+            return (1, f"{name}: simulated failure")
+        return (0, "")
+
+
+def test_failure_after_swapoff_attempts_swapon_recovery() -> None:
+    # swapoff succeeded, then mkswap failed: swap is now OFF and the file is no
+    # longer in /proc/swaps, so a plain re-run would be refused by the planner.
+    # The executor must try a best-effort `swapon <file>` and report it.
+    plan = build_grow_plan(32 * GiB, state=_state())
+    runner = FakeRunner(fail_on="mkswap")
+    diagnostics: list[str] = []
+
+    with pytest.raises(CliError) as excinfo:
+        apply_grow_plan(
+            plan, apply=True, runner=runner, geteuid=_root, diagnostic=diagnostics.append
+        )
+
+    assert runner.calls[-1] == ("swapon", ["/swap.img"])
+    err = excinfo.value
+    assert err.code == 2
+    assert "recovery" in err.message and "re-enabled" in err.message
+    assert any("swapon /swap.img" in d for d in diagnostics)
+
+
+def test_failed_recovery_tells_operator_to_swapon_manually() -> None:
+    plan = build_grow_plan(32 * GiB, state=_state())
+    runner = _FailRunner({"mkswap", "swapon"})
+
+    with pytest.raises(CliError) as excinfo:
+        apply_grow_plan(plan, apply=True, runner=runner, geteuid=_root)
+
+    err = excinfo.value
+    assert runner.calls[-1] == ("swapon", ["/swap.img"])
+    assert "recovery" in err.message and "failed" in err.message
+    assert "sudo swapon /swap.img" in err.remediation
+
+
+def test_missing_tool_after_swapoff_also_recovers() -> None:
+    plan = build_grow_plan(32 * GiB, state=_state())
+    runner = FakeRunner(absent=["fallocate"])
+
+    with pytest.raises(CliError):
+        apply_grow_plan(plan, apply=True, runner=runner, geteuid=_root)
+
+    assert runner.calls[-1] == ("swapon", ["/swap.img"])
+
+
+def test_fstab_failure_after_swapon_needs_no_recovery() -> None:
+    # Swap is already back on when the fstab ensure runs; no recovery swapon.
+    plan = build_grow_plan(32 * GiB, state=_state())
+    runner = FakeRunner(fail_on="sh")
+
+    with pytest.raises(CliError):
+        apply_grow_plan(plan, apply=True, runner=runner, geteuid=_root)
+
+    assert [n for n in runner.names if n == "swapon"] == ["swapon"]
 
 
 def test_missing_tool_aborts_as_env_error() -> None:
@@ -277,5 +346,5 @@ def test_missing_tool_aborts_as_env_error() -> None:
         apply_grow_plan(plan, apply=True, runner=runner, geteuid=_root)
 
     assert excinfo.value.code == 2
-    assert runner.names == ["swapoff", "fallocate"]
+    assert runner.names == ["swapoff", "fallocate", "swapon"]  # swapon = recovery
     assert "mkswap" not in runner.names

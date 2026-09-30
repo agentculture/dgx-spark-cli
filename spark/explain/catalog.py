@@ -35,6 +35,7 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 - `dgx-spark-cli status` — machine-wide scope, anomalies first (the headline).
 - `dgx-spark-cli memory` — unified RAM + swap (CPU and GPU share one pool).
 - `dgx-spark-cli gpu` — Blackwell GB10: utilization, temp, power, GPU processes.
+- `dgx-spark-cli power` — GB10 power draw, SM clocks, P-state (nvidia-smi).
 - `dgx-spark-cli disk` — filesystem usage for real block devices.
 - `dgx-spark-cli thermal` — SoC thermal zones and hwmon sensors.
 - `dgx-spark-cli containers` — running Docker containers and health.
@@ -184,6 +185,28 @@ attributed to the GPU. Unavailable (exit 0) when no `nvidia-smi` is present.
     dgx-spark-cli gpu --json
 """
 
+_POWER = """\
+# dgx-spark-cli power
+
+GB10 power snapshot via nvidia-smi (`power.draw`, `power.limit`, `clocks.sm`,
+`clocks.max.sm`, `pstate`). The GB10 has no `nvpmodel` and no per-rail sensors,
+so unlike Jetson's `power` verb there are no `nvpmodel` / `rails` keys: only
+what nvidia-smi reports. `power.limit` is `[N/A]` on the GB10; it is reported
+as `null` with a warning, never guessed. Unavailable (exit 0) when no
+`nvidia-smi` is present.
+
+## JSON data keys
+
+- `power_draw_w` (float W), `power_limit_w` (float W or null)
+- `clocks_sm_mhz`, `clocks_max_sm_mhz` (int MHz)
+- `pstate` (e.g. `P0`)
+
+## Usage
+
+    dgx-spark-cli power
+    dgx-spark-cli power --json
+"""
+
 _DISK = """\
 # dgx-spark-cli disk
 
@@ -232,7 +255,9 @@ _NETWORK = """\
 Interfaces, default route, and reachable addresses, summarized from `ip -br
 addr` and `ip route show default`. Named interfaces (wifi/ethernet/tailscale/
 bridges) are listed with their IPv4; the many container `veth` pairs are rolled
-up to a count. "Reachable" excludes docker bridge gateways and link-local.
+up to a count. "Reachable" excludes docker bridge gateways, link-local, and
+USB-gadget links (`l4tbr0`, `usb*`, `rndis*`, kind `usb-gadget`), which only
+reach a host on the other end of a USB cable.
 
 ## Usage
 
@@ -267,13 +292,19 @@ as a systemd `--user` service this CLI installs and manages.
 Watches: memory %, swap %, disk %, hottest sensor, GPU temp, load-per-core,
 container health, and subsystem availability (nvidia-smi / docker going dark).
 
+`subsystem_down` fires (critical) only on a genuine probe failure: the tool is
+installed and usable, yet the probe fails (e.g. the docker daemon is down or
+nvidia-smi errors). A subsystem that is merely **not installed** (no docker) or
+**not permitted** (this user is not in the docker group) is reported as
+`available: false` by `check`, but raises no alert.
+
 ## Verbs
 
 - `monitor check` — evaluate now, print firing alerts (no webhook, no state).
 - `monitor once` — one cycle: evaluate, deliver transitions, update state.
 - `monitor run` — foreground watch loop (the systemd ExecStart).
 - `monitor test` — POST a synthetic alert to verify the webhook.
-- `monitor config [--init]` — show resolved config / write a scaffold.
+- `monitor config [--init [--force]]` — show resolved config / write a scaffold.
 - `monitor install | enable | disable | status | uninstall` — systemd `--user`.
 
 ## Config
@@ -325,7 +356,10 @@ _MONITOR_CONFIG = """\
 # dgx-spark-cli monitor config
 
 Show the resolved configuration (thresholds, webhook, interval) and whether it
-is valid. `--init` writes a scaffold config file you can edit. `--json`,
+is valid. `--init` writes a scaffold config file you can edit; it refuses
+(exit 1) when the file already exists, unless `--force` is also given. The
+file is written mode 0600 (and a directory it creates 0700), since the webhook
+URL is often a bearer secret. `--json`,
 `--config PATH`. The webhook may also come from `DGX_SPARK_WEBHOOK_URL`.
 `notify_on_start` (default `true`) toggles the startup liveness alert.
 """
@@ -388,9 +422,11 @@ surface in one read, use `dgx-spark-cli swap overview` (the superset).
 _SWAP_GROW = """\
 # dgx-spark-cli swap grow SIZE
 
-The guarded mutator: resize the file-backed swapfile in place
+The guarded mutator: resize the file-backed swapfile detected in `/proc/swaps`
+(e.g. `/swap.img` or `/swapfile`) in place
 (`swapoff -> fallocate -> chmod -> mkswap -> swapon`, plus an fstab ensure on the
-persistent path). `SIZE` is a **placeholder** — replace it with a human-readable
+persistent path). A host with no file-backed swap is refused (exit 1).
+`SIZE` is a **placeholder** — replace it with a human-readable
 size (`64G`, `32GiB`, `16g`, or a raw byte count; binary 1024-based). Don't type
 the literal word `size`: `swap grow 64G`, not `swap grow size 64G`.
 
@@ -471,6 +507,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("status",): _STATUS,
     ("memory",): _MEMORY,
     ("gpu",): _GPU,
+    ("power",): _POWER,
     ("disk",): _DISK,
     ("thermal",): _THERMAL,
     ("containers",): _CONTAINERS,
