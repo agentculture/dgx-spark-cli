@@ -510,7 +510,7 @@ Exit codes: 0 done, 1 refused by state (`window_active`, `no_stored_state`,
 `declined`), 2 environment (`unsupported`, `not_granted`, `tool_missing`,
 `failed`). The GB10 reports `supported: false` unless nvidia-smi lists supported
 clocks, so `lock` exits 2 `unsupported` there. State lives in
-`${XDG_STATE_HOME:-~/.local/state}/spark/window.json`.
+`~/.local/state/spark/window.json`.
 
     dgx-spark-cli window show --json
     dgx-spark-cli window store

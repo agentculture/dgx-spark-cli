@@ -29,27 +29,20 @@ def real_proc(argv: list[str], stdin: Optional[str] = None) -> tuple[int, str, s
 STATE_FILENAME = "window.json"
 
 
-def _default_state_dir() -> Path:
-    return Path(os.path.realpath(Path.home() / ".local" / "state" / "spark"))
-
-
 def state_dir() -> Path:
-    """Resolved state directory, sanitised against a tainted ``XDG_STATE_HOME``.
+    """Resolved state directory: always ``~/.local/state/spark``.
 
-    ``XDG_STATE_HOME`` is honoured only when it is absolute and has no ``..``
-    components; anything else falls back to ``~/.local/state/spark``.
+    Deliberately NOT derived from ``XDG_STATE_HOME`` (or any environment
+    variable): an env-derived base is a taint source for path-traversal analysis.
     """
-    raw = os.environ.get("XDG_STATE_HOME")
-    if not raw or not os.path.isabs(raw) or ".." in Path(raw).parts:
-        return _default_state_dir()
-    return Path(os.path.realpath(os.path.join(raw, "spark")))
+    return Path(os.path.realpath(Path.home() / ".local" / "state" / "spark"))
 
 
 def state_path() -> Path:
     base = state_dir()
     target = Path(os.path.realpath(base / STATE_FILENAME))
     if os.path.commonpath([str(base), str(target)]) != str(base):
-        return _default_state_dir() / STATE_FILENAME
+        return base / STATE_FILENAME
     return target
 
 

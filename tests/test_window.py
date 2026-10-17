@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import pytest
 
@@ -209,21 +211,20 @@ def test_cli_json_single_object_and_exit(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["reason"] == "unsupported"
 
 
-def test_state_dir_sanitises_xdg_state_home(tmp_path, monkeypatch):
+def test_xdg_state_home_is_ignored_by_window_state(tmp_path, monkeypatch):
     from spark.window import ctx as wctx
 
-    default = wctx._default_state_dir()
-    for bad in ("relative/dir", str(tmp_path / ".." / "x"), "../x"):
-        monkeypatch.setenv("XDG_STATE_HOME", bad)
-        assert wctx.state_dir() == default
-        assert wctx.state_path() == default / "window.json"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    for xdg in ("relative/dir", str(tmp_path / "xdg"), "../x"):
+        monkeypatch.setenv("XDG_STATE_HOME", xdg)
+        assert wctx.state_dir() == Path(os.path.realpath(tmp_path / "home" / ".local/state/spark"))
 
 
-def test_state_dir_honours_clean_absolute_xdg(tmp_path, monkeypatch):
+def test_state_lives_under_home_local_state(tmp_path, monkeypatch):
     from spark.window import ctx as wctx
 
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    base = (tmp_path / "spark").resolve()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    base = (tmp_path / ".local" / "state" / "spark").resolve()
     assert wctx.state_dir() == base
     assert wctx.state_path() == base / "window.json"
 
