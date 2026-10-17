@@ -14,6 +14,8 @@ from spark.window import grant
 from spark.window import window as win
 from spark.window.ctx import make_ctx
 
+_JSON_HELP = "Emit one JSON object."
+
 
 def _emit(obj: dict, args: argparse.Namespace) -> int:
     code = int(obj.pop("exit", 0))
@@ -68,17 +70,17 @@ def register(sub: argparse._SubParsersAction) -> None:
         ("restore", "Return to the stored state, then delete it."),
     ):
         p = wsub.add_parser(verb, help=text)
-        p.add_argument("--json", action="store_true", help="Emit one JSON object.")
+        p.add_argument("--json", action="store_true", help=_JSON_HELP)
         p.set_defaults(func=_cmd_window(verb))
-    w.add_argument("--json", action="store_true", help="Emit one JSON object.")
+    w.add_argument("--json", action="store_true", help=_JSON_HELP)
     w.set_defaults(func=_cmd_window("show"))
 
     d = sub.add_parser("drop-caches", help="sync, then clear the page cache (needs the grant).")
-    d.add_argument("--json", action="store_true", help="Emit one JSON object.")
+    d.add_argument("--json", action="store_true", help=_JSON_HELP)
     d.set_defaults(func=_cmd_drop)
 
     g = sub.add_parser("grant-permissions", help="Install the passwordless sudo rules needed.")
     g.add_argument("--check", action="store_true", help="Only report; change nothing.")
     g.add_argument("--yes", action="store_true", help="Skip the install consent prompt.")
-    g.add_argument("--json", action="store_true", help="Emit one JSON object.")
+    g.add_argument("--json", action="store_true", help=_JSON_HELP)
     g.set_defaults(func=_cmd_grant)

@@ -26,9 +26,31 @@ def real_proc(argv: list[str], stdin: Optional[str] = None) -> tuple[int, str, s
     return p.returncode, p.stdout, p.stderr
 
 
+STATE_FILENAME = "window.json"
+
+
+def _default_state_dir() -> Path:
+    return Path(os.path.realpath(Path.home() / ".local" / "state" / "spark"))
+
+
+def state_dir() -> Path:
+    """Resolved state directory, sanitised against a tainted ``XDG_STATE_HOME``.
+
+    ``XDG_STATE_HOME`` is honoured only when it is absolute and has no ``..``
+    components; anything else falls back to ``~/.local/state/spark``.
+    """
+    raw = os.environ.get("XDG_STATE_HOME")
+    if not raw or not os.path.isabs(raw) or ".." in Path(raw).parts:
+        return _default_state_dir()
+    return Path(os.path.realpath(os.path.join(raw, "spark")))
+
+
 def state_path() -> Path:
-    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
-    return Path(base) / "spark" / "window.json"
+    base = state_dir()
+    target = Path(os.path.realpath(base / STATE_FILENAME))
+    if os.path.commonpath([str(base), str(target)]) != str(base):
+        return _default_state_dir() / STATE_FILENAME
+    return target
 
 
 def _collect_power() -> dict:

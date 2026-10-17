@@ -56,13 +56,17 @@ def test_store_then_restore_returns_to_stored_state(tmp_path):
     c = ctx(tmp_path, f)
     assert win.store(c)["stored"] is True
     r = win.lock(c)
-    assert r["ok"] and r["active"] is True
+    assert r["ok"]
+    assert r["active"] is True
     assert ["sudo", "-n", "/usr/bin/nvidia-smi", "-lgc", "3003,3003"] in f.argvs()
     # second store while active is refused
     s = win.store(c)
     assert (s["ok"], s["reason"], s["exit"]) == (False, "window_active", 1)
     r = win.restore(c)
-    assert r["ok"] and r["restored"] is True and r["stored"] is False and r["active"] is False
+    assert r["ok"]
+    assert r["restored"] is True
+    assert r["stored"] is False
+    assert r["active"] is False
     assert ["sudo", "-n", "/usr/bin/nvidia-smi", "-rgc"] in f.argvs()
     assert not (tmp_path / "w.json").exists()
 
@@ -99,15 +103,20 @@ def test_lock_failure_reported(tmp_path):
 
 def test_show_shape(tmp_path):
     r = win.show(ctx(tmp_path, Fake()))
-    assert r["ok"] and r["reason"] is None and r["clocks"]["gpu_mhz"] == 1000
-    assert r["temps_c"] == {"tj": 50.0} and r["power_mode"] is None and r["fan_profile"] is None
+    assert r["ok"]
+    assert r["reason"] is None
+    assert r["clocks"]["gpu_mhz"] == 1000
+    assert r["temps_c"] == {"tj": 50.0}
+    assert r["power_mode"] is None
+    assert r["fan_profile"] is None
 
 
 def test_clocks_locked_is_null_in_every_show_shaped_payload(tmp_path):
     c = ctx(tmp_path, Fake())
     payloads = [win.show(c), win.store(c), win.lock(c), win.restore(c)]
     for r in payloads:
-        assert "clocks_locked" in r and r["clocks_locked"] is None
+        assert "clocks_locked" in r
+        assert r["clocks_locked"] is None
 
 
 @pytest.mark.parametrize(
@@ -117,7 +126,9 @@ def test_clocks_locked_is_null_in_every_show_shaped_payload(tmp_path):
 def test_existing_rule_detected_and_reused(tmp_path, listing, rule):
     f = Fake(listing)
     out = grant.install(ctx(tmp_path, f), False, assume_yes=True)
-    assert out["drop_caches"]["rule"] == rule and out["installed"] is False and out["exit"] == 0
+    assert out["drop_caches"]["rule"] == rule
+    assert out["installed"] is False
+    assert out["exit"] == 0
     assert not any(a[:2] == ["sudo", "install"] for a in f.argvs())
     assert not any(a[0] == "visudo" for a in f.argvs())
 
@@ -160,11 +171,13 @@ def test_install_declined_exit_1(tmp_path):
 def test_install_runs_visudo_then_one_install(tmp_path):
     f = Fake(PASSWORD_ALL)
     out = grant.install(ctx(tmp_path, f), False, True)
-    assert out["installed"] is True and out["exit"] == 0
+    assert out["installed"] is True
+    assert out["exit"] == 0
     argvs = f.argvs()
     assert argvs[1][:2] == ["visudo", "-cf"]
     inst = [a for a in argvs if a[:2] == ["sudo", "install"]]
-    assert len(inst) == 1 and inst[0][-1] == "/etc/sudoers.d/spark-lobes"
+    assert len(inst) == 1
+    assert inst[0][-1] == "/etc/sudoers.d/spark-lobes"
     assert out["rules"] == ["tester ALL=(ALL) NOPASSWD: /usr/sbin/sysctl -w vm.drop_caches=3"]
 
 
@@ -180,12 +193,42 @@ def test_cli_json_single_object_and_exit(tmp_path, monkeypatch, capsys):
     rc = main(["drop-caches", "--json"])
     assert rc == 2
     obj = json.loads(capsys.readouterr().out)
-    assert obj["reason"] == "not_granted" and "exit" not in obj
+    assert obj["reason"] == "not_granted"
+    assert "exit" not in obj
     rc = main(["grant-permissions", "--check", "--json"])
     obj = json.loads(capsys.readouterr().out)
-    assert rc == 0 and obj["drop_caches"]["granted"] is False
+    assert rc == 0
+    assert obj["drop_caches"]["granted"] is False
     rc = main(["window", "store", "--json"])
     obj = json.loads(capsys.readouterr().out)
-    assert rc == 0 and obj["action"] == "store" and obj["stored"] is True
+    assert rc == 0
+    assert obj["action"] == "store"
+    assert obj["stored"] is True
     rc = main(["window", "lock", "--json"])
-    assert rc == 2 and json.loads(capsys.readouterr().out)["reason"] == "unsupported"
+    assert rc == 2
+    assert json.loads(capsys.readouterr().out)["reason"] == "unsupported"
+
+
+def test_state_dir_sanitises_xdg_state_home(tmp_path, monkeypatch):
+    from spark.window import ctx as wctx
+
+    default = wctx._default_state_dir()
+    for bad in ("relative/dir", str(tmp_path / ".." / "x"), "../x"):
+        monkeypatch.setenv("XDG_STATE_HOME", bad)
+        assert wctx.state_dir() == default
+        assert wctx.state_path() == default / "window.json"
+
+
+def test_state_dir_honours_clean_absolute_xdg(tmp_path, monkeypatch):
+    from spark.window import ctx as wctx
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    base = (tmp_path / "spark").resolve()
+    assert wctx.state_dir() == base
+    assert wctx.state_path() == base / "window.json"
+
+
+def test_state_file_stays_inside_its_directory(tmp_path):
+    c = ctx(tmp_path, Fake())
+    c.state_file = tmp_path / "sub" / "w.json"
+    assert win._state_file(c) == (tmp_path / "sub" / "w.json").resolve()

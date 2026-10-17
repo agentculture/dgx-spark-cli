@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Optional
 
 from spark.window import grant
@@ -35,23 +36,33 @@ def supported(ctx: Ctx) -> bool:
     return False
 
 
+def _state_file(ctx: Ctx) -> Path:
+    """Resolved state file, verified to stay inside its own resolved directory."""
+    target = Path(os.path.realpath(ctx.state_file))
+    parent = Path(os.path.realpath(target.parent))
+    if not target.name or os.path.commonpath([str(parent), str(target)]) != str(parent):
+        raise OSError("state path escapes its directory")
+    return target
+
+
 def _load(ctx: Ctx) -> Optional[dict]:
     try:
-        return json.loads(ctx.state_file.read_text())
+        return json.loads(_state_file(ctx).read_text())
     except (OSError, ValueError):
         return None
 
 
 def _save(ctx: Ctx, state: dict) -> None:
-    ctx.state_file.parent.mkdir(parents=True, exist_ok=True)
-    tmp = ctx.state_file.with_suffix(".tmp")
+    target = _state_file(ctx)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".tmp")
     tmp.write_text(json.dumps(state))
-    os.replace(tmp, ctx.state_file)
+    os.replace(tmp, target)
 
 
 def _clear(ctx: Ctx) -> None:
     try:
-        ctx.state_file.unlink()
+        _state_file(ctx).unlink()
     except OSError:
         pass
 
