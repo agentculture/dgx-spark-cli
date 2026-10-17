@@ -103,6 +103,13 @@ def test_show_shape(tmp_path):
     assert r["temps_c"] == {"tj": 50.0} and r["power_mode"] is None and r["fan_profile"] is None
 
 
+def test_clocks_locked_is_null_in_every_show_shaped_payload(tmp_path):
+    c = ctx(tmp_path, Fake())
+    payloads = [win.show(c), win.store(c), win.lock(c), win.restore(c)]
+    for r in payloads:
+        assert "clocks_locked" in r and r["clocks_locked"] is None
+
+
 @pytest.mark.parametrize(
     "listing,rule",
     [(SYSCTL_LISTING, "sysctl"), (TEE_LISTING, "tee"), (ALL_LISTING, "all")],

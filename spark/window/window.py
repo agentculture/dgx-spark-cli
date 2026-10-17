@@ -66,6 +66,8 @@ def snapshot(ctx: Ctx) -> dict:
         "ok": True,
         "reason": None,
         "active": bool(state and state.get("locked")),
+        # GB10 has no devfreq/application-clock lock to read without root: always unknown.
+        "clocks_locked": None,
         "stored": state is not None,
         "supported": supported(ctx),
         "power_mode": None,
