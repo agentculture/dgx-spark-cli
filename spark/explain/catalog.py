@@ -45,6 +45,12 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 All machine-scope verbs are read-only, support `--json`, and exit 0 even when a
 subsystem is absent (it reports `available: false`). `doctor` is the health gate.
 
+## Window, caches and grant
+
+- `dgx-spark-cli window show|store|lock|restore` — benchmark clock window.
+- `dgx-spark-cli drop-caches` — clear the page cache (needs the grant).
+- `dgx-spark-cli grant-permissions [--check]` — install the sudo rules.
+
 ## Monitoring (background watchdog)
 
 - `dgx-spark-cli monitor` — deterministic, AI-free threshold watchdog that
@@ -493,6 +499,43 @@ descriptive-verb contract): the underlying collectors degrade to
 """
 
 
+_WINDOW = """\
+# dgx-spark-cli window
+
+Benchmark clock window (machine-CLI contract, lobes-cli
+docs/contracts/machine-cli-window.md). Verbs: `show`, `store`, `lock`,
+`restore`; all take `--json` (one object with `ok` and `reason`).
+
+Exit codes: 0 done, 1 refused by state (`window_active`, `no_stored_state`,
+`declined`), 2 environment (`unsupported`, `not_granted`, `tool_missing`,
+`failed`). The GB10 reports `supported: false` unless nvidia-smi lists supported
+clocks, so `lock` exits 2 `unsupported` there. State lives in
+`${XDG_STATE_HOME:-~/.local/state}/spark/window.json`.
+
+    dgx-spark-cli window show --json
+    dgx-spark-cli window store
+"""
+
+_DROP_CACHES = """\
+# dgx-spark-cli drop-caches
+
+`sync`, then clear the page cache via `sudo -n` (never prompts). Needs the rule
+from `grant-permissions`; without it exits 2 with `reason: not_granted`.
+
+    dgx-spark-cli drop-caches --json
+"""
+
+_GRANT = """\
+# dgx-spark-cli grant-permissions
+
+Detects the passwordless sudo rule (`sudo -n -l`; sysctl, tee or NOPASSWD ALL
+all count and are reused). `--check` only reports. Otherwise installs one
+targeted rule via temp file, `visudo -cf` and one `sudo install` to
+`/etc/sudoers.d/spark-lobes`, after consent (or `--yes`). Never full sudo.
+
+    dgx-spark-cli grant-permissions --check --json
+"""
+
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
     ("spark",): _ROOT,
@@ -513,6 +556,13 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("containers",): _CONTAINERS,
     ("network",): _NETWORK,
     ("processes",): _PROCESSES,
+    ("window",): _WINDOW,
+    ("window", "show"): _WINDOW,
+    ("window", "store"): _WINDOW,
+    ("window", "lock"): _WINDOW,
+    ("window", "restore"): _WINDOW,
+    ("drop-caches",): _DROP_CACHES,
+    ("grant-permissions",): _GRANT,
     ("monitor",): _MONITOR,
     ("monitor", "overview"): _MONITOR,
     ("monitor", "check"): _MONITOR_CHECK,
