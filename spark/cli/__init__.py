@@ -78,6 +78,7 @@ def _build_parser() -> argparse.ArgumentParser:
     from spark.cli._commands import overview as _overview_cmd
     from spark.cli._commands import swap as _swap_group
     from spark.cli._commands import whoami as _whoami_cmd
+    from spark.cli._commands import window as _window_cmds
 
     parser = _CliArgumentParser(
         prog="dgx-spark-cli",
@@ -105,6 +106,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _monitor_group.register(sub)
     # Swap inspection, per-process history, and the guarded swap grow.
     _swap_group.register(sub)
+    # Benchmark window, drop-caches and the sudo grant (machine-CLI contract).
+    _window_cmds.register(sub)
     # Register your own noun groups here:
     #   from spark.cli._commands import my_noun as _my_noun_group
     #   _my_noun_group.register(sub)

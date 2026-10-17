@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-10-17
+
+### Added
+
+- `clocks_locked` in every show-shaped window payload (contract section 3). Always `null` on GB10: no devfreq lock exists and application-clock state cannot be proven without root.
+
+## [0.9.0] - 2026-10-17
+
+### Added
+
+- spark window show|store|lock|restore, drop-caches and grant-permissions verbs implementing the lobes machine-CLI window contract; GB10 reports supported:false (lock exits 2 unsupported) unless nvidia-smi lists supported clocks
+
 ## [0.8.0] - 2026-09-29
 
 ### Added
